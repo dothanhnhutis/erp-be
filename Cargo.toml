@@ -1,0 +1,86 @@
+[workspace]
+members = ["apps/api", "libs/shared"]
+resolver = "3"
+
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+# 1. Web Framework & Async Runtime
+axum = { version = "0.8.9", features = ["macros"] }
+axum-extra = { version = "0.12.6", features = ["cookie"] }
+tokio = { version = "1.53.1", features = ["full"] }
+tower = { version = "0.5.3", features = ["util", "timeout"] }
+tower-http = { version = "0.7.0", features = [
+    "cors",
+    "trace",
+    "compression-full",
+] }
+
+# 2. Database (PostgreSQL không dùng ORM)
+# Hỗ trợ compile-time SQL check, UUIDv7 và JSONB
+sqlx = { version = "0.9.0", features = [
+    "runtime-tokio",
+    "tls-native-tls",
+    "postgres",
+    "uuid",
+    "chrono",
+    "json",
+    "macros",
+] }
+
+# 3. Serialization & Validation
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+validator = { version = "0.21.0", features = ["derive"] }
+reqwest = { version = "0.13.4", features = ["json", "query"] }
+
+# 4. Utilities
+uuid = { version = "1.24.1", features = ["v7", "serde", "fast-rng"] }
+chrono = { version = "0.4.45", features = ["serde"] }
+time = "0.3.55"
+dotenvy = "0.15.7"
+anyhow = "1.0.104"
+thiserror = "2.0.20"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
+tracing-appender = "0.2.5"
+
+# 5. Cache
+redis = { version = "1.6.0", features = ["tokio-comp", "connection-manager"] }
+moka = { version = "0.12.16", features = ["future"] }
+deadpool = "0.13.0"
+
+# 6. Security (JWT & Password Hashing)
+jsonwebtoken = "11.0.0"
+argon2 = { version = "0.5.3", features = ["std"] }
+rand = { version = "0.10.2", features = ["std"] }
+sha2 = "0.11.0"
+hex = "0.4.3"
+
+# 7. Messaging & Email (RabbitMQ + Gmail SMTP)
+lapin = "4.10.0"
+futures-lite = "2.6.1"
+lettre = { version = "0.11.23", default-features = false, features = [
+    "tokio1-rustls-tls",
+    "smtp-transport",
+    "builder",
+] }
+
+# Cloudfare R2 storage
+aws-config = { version = "1.10.1", features = ["behavior-version-latest"] }
+aws-sdk-s3 = "1.142.0"
+
+
+
+
+[profile.release]
+# Tối ưu hóa file binary cho Production
+opt-level = 3     # Tối ưu hóa tốc độ tối đa
+lto = true        # Link Time Optimization (giảm kích thước file build)
+codegen-units = 1 # Giúp compiler tối ưu hóa tốt hơn
+panic = "abort"   # Giảm kích thước file bằng cách bỏ qua stack unwinding
+strip = true      # Loại bỏ các ký tự debug để file cực nhẹ
