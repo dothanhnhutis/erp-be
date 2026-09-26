@@ -17,7 +17,7 @@ tower = { version = "0.5.3", features = ["util", "timeout"] }
 tower-http = { version = "0.7.0", features = [
     "cors",
     "trace",
-    "compression-full",
+    "compression-full","request-id", "sensitive-headers"
 ] }
 
 # 2. Database (PostgreSQL không dùng ORM)
@@ -75,6 +75,8 @@ aws-config = { version = "1.10.1", features = ["behavior-version-latest"] }
 aws-sdk-s3 = "1.142.0"
 
 
+# my crate
+shared = { path = "libs/shared" }
 
 
 [profile.release]
@@ -82,5 +84,5 @@ aws-sdk-s3 = "1.142.0"
 opt-level = 3     # Tối ưu hóa tốc độ tối đa
 lto = true        # Link Time Optimization (giảm kích thước file build)
 codegen-units = 1 # Giúp compiler tối ưu hóa tốt hơn
-panic = "abort"   # Giảm kích thước file bằng cách bỏ qua stack unwinding
+# panic = "abort"   # Giảm kích thước file bằng cách bỏ qua stack unwinding
 strip = true      # Loại bỏ các ký tự debug để file cực nhẹ

@@ -1,48 +1,28 @@
+mod http;
 mod logger;
 
 use axum::{Router, routing::get};
+use http::RouterExt;
 use shared::config::AppConfig;
 use tokio::net::TcpListener;
-use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
-use tracing::Level;
-use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    //log
-    let _guard = logger::init_tracing()?;
+    // load env: .env không bắt buộc (prod có thể set biến thật); file sai cú pháp vẫn báo lỗi
+    if let Err(e) = dotenvy::dotenv() {
+        if !e.not_found() {
+            return Err(e.into());
+        }
+    }
+    // config
+    let config: AppConfig = AppConfig::from_env()?;
 
-    // env
-    let app_env = std::env::var("APP_ENV").unwrap_or_else(|_| "dev".into());
-    dotenvy::from_filename(format!(".env.{app_env}"))?;
-    let config = AppConfig::from_env()?;
+    // init log
+    let _guard = logger::init(&config)?;
 
-    // build our application with a single route
     let app = Router::new()
         .route("/health-check", get(|| async { "OK" }))
-        .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(
-                    DefaultMakeSpan::new()
-                        .level(Level::INFO)
-                        .include_headers(true),
-                )
-                .on_response(
-                    DefaultOnResponse::new()
-                        .level(Level::INFO)
-                        .latency_unit(tower_http::LatencyUnit::Millis),
-                ),
-        );
-    // .layer(
-    //     TraceLayer::new_for_http().make_span_with(
-    //         DefaultMakeSpan::new()
-    //             .level(Level::INFO)
-    //             .include_headers(true),
-    //     ),
-    // )
-    // .layer(SetSensitiveRequestHeadersLayer::new([
-    //     AUTHORIZATION,
-    //     COOKIE,
-    // ]));
+        .with_http_tracing();
 
     let addr = format!("{}:{}", config.server_host, config.server_port);
     let listener = TcpListener::bind(&addr).await?;

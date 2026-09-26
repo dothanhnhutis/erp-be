@@ -1,10 +1,39 @@
 use std::{env, num::ParseIntError};
 use thiserror::Error;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Environment {
+    Dev,
+    Prod,
+}
+
+impl Environment {
+    pub fn from_env() -> Self {
+        match std::env::var("APP_ENV").as_deref() {
+            Ok("prod" | "production") => Self::Prod,
+            _ => Self::Dev,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Dev => "dev",
+            Self::Prod => "prod",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct AppConfig {
+    pub app_env: Environment,
+    pub crate_name: String,
     pub server_host: String,
     pub server_port: u16,
+    pub redis_url: String,
+    pub database_url: String,
+    pub log_dir: String,
+    pub log_filter: String,
+    pub log_max_file: usize,
 }
 
 #[derive(Debug, Error)]
@@ -16,7 +45,7 @@ pub enum ConfigError {
     NotUnicode(&'static str),
 
     #[error("invalid value for `{key}`: {value:?}")]
-    InvalidPort {
+    InvalidNumber {
         key: &'static str,
         value: String,
         #[source]
@@ -44,15 +73,29 @@ impl AppConfig {
         let port_raw = optional("SERVER_PORT", "4000")?;
         let server_port = port_raw
             .parse::<u16>()
-            .map_err(|source| ConfigError::InvalidPort {
+            .map_err(|source| ConfigError::InvalidNumber {
                 key: "SERVER_PORT",
                 value: port_raw.clone(),
                 source,
             })?;
+        let log_max_file_raw = optional("LOG_MAX_FILE", "7")?;
+        let log_max_file =
+            log_max_file_raw
+                .parse::<usize>()
+                .map_err(|source| ConfigError::InvalidNumber {
+                    key: "LOG_MAX_FILE",
+                    value: log_max_file_raw.clone(),
+                    source,
+                })?;
 
         Ok(Self {
-            // redis_url: optional("REDIS_URL", "redis://127.0.0.1:6379")?,
-            // database_url: required("DATABASE_URL")?,
+            app_env: Environment::from_env(),
+            crate_name: required("CRATE_NAME")?,
+            redis_url: required("REDIS_URL")?,
+            database_url: required("DATABASE_URL")?,
+            log_dir: required("LOG_DIR")?,
+            log_filter: required("LOG_FILTER")?,
+            log_max_file,
             server_host: optional("SERVER_HOST", "0.0.0.0")?,
             server_port,
         })
