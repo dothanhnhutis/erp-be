@@ -1,27 +1,36 @@
+mod handlers;
 mod http;
 mod logger;
+mod routes;
 
-use axum::{Router, routing::get};
+use axum::Router;
 use http::RouterExt;
 use shared::config::AppConfig;
 use tokio::net::TcpListener;
 
+use routes::create_router;
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // load env: .env không bắt buộc (prod có thể set biến thật); file sai cú pháp vẫn báo lỗi
-    if let Err(e) = dotenvy::dotenv() {
-        if !e.not_found() {
-            return Err(e.into());
-        }
+    if let Err(e) = dotenvy::dotenv()
+        && !e.not_found()
+    {
+        tracing::error!("{e}");
     }
+
     // config
     let config: AppConfig = AppConfig::from_env()?;
 
     // init log
-    let _guard = logger::init(&config)?;
+    // let _guard = logger::init(&config)?;
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::new(&config.log_filter))
+        .with(fmt::layer().json().flatten_event(true)) // flatten giúp đẩy các field tùy biến ra ngoài layer gốc của JSON
+        .init();
 
     let app = Router::new()
-        .route("/health-check", get(|| async { "OK" }))
+        .nest("/api", create_router())
         .with_http_tracing();
 
     let addr = format!("{}:{}", config.server_host, config.server_port);
