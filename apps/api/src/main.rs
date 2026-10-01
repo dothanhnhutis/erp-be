@@ -1,3 +1,5 @@
+mod error;
+mod extractors;
 mod handlers;
 mod http;
 mod logger;
@@ -5,6 +7,7 @@ mod routes;
 
 use axum::Router;
 use http::RouterExt;
+use infrastructure::postgres::pool::init_db_pool;
 use shared::config::AppConfig;
 use tokio::net::TcpListener;
 
@@ -28,6 +31,10 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::EnvFilter::new(&config.log_filter))
         .with(fmt::layer().json().flatten_event(true)) // flatten giúp đẩy các field tùy biến ra ngoài layer gốc của JSON
         .init();
+
+    let pool = init_db_pool(&config.database_url)
+        .await
+        .expect("không kết nối được database");
 
     let app = Router::new()
         .nest("/api", create_router())

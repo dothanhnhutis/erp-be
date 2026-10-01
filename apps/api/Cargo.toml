@@ -7,6 +7,7 @@ publish.workspace = true
 
 [dependencies]
 
+infrastructure = {path = "../../libs/infrastructure"}
 
 shared.workspace= true
 axum.workspace = true
@@ -18,3 +19,9 @@ tracing-appender.workspace = true
 tower.workspace = true
 tower-http.workspace = true
 dotenvy.workspace = true
+validator.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+

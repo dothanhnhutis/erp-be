@@ -1,58 +1,62 @@
-use axum::{
-    extract::{FromRequest, FromRequestParts, Request},
-    http::{HeaderMap, request::Parts},
-};
-use std::time::{Duration, Instant};
+use crate::extractors::validate::ValidatedBodyJson;
+use axum::response::IntoResponse;
+use serde::Deserialize;
+use validator::{Validate, ValidationError};
 
-#[derive(Debug)]
-// an extractor that wraps another and measures how long time it takes to run
-pub struct Timing<E> {
-    pub extractor: E,
-    pub duration: Duration,
+#[derive(Debug, Validate, Deserialize)]
+pub struct LoginPayload {
+    #[validate(email)]
+    email: String,
+    #[validate(
+        length(min = 1, message = "Email và mật khẩu không hợp lệ."),
+        custom(function = "validate_password")
+    )]
+    pub password: String,
+    pub app_version: Option<String>,
+    pub platform: Option<String>,
+    #[validate(custom(function = "validate_device_type"))]
+    pub device_type: String,
+    pub device_name: Option<String>,
+    pub device_id: Option<String>,
 }
 
-// we must implement both `FromRequestParts`
-impl<S, T> FromRequestParts<S> for Timing<T>
-where
-    S: Send + Sync,
-    T: FromRequestParts<S>,
-{
-    type Rejection = T::Rejection;
+fn validate_password(password: &str) -> Result<(), ValidationError> {
+    let mut has_uppercase = false;
+    let mut has_lowercase = false;
+    let mut has_digit = false;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let start = Instant::now();
-        let extractor = T::from_request_parts(parts, state).await?;
-        let duration = start.elapsed();
-        Ok(Timing {
-            extractor,
-            duration,
+    for c in password.chars() {
+        has_uppercase |= c.is_ascii_uppercase();
+        has_lowercase |= c.is_ascii_lowercase();
+        has_digit |= c.is_ascii_digit();
+    }
+    if !password.is_empty() && has_uppercase && has_lowercase && has_digit {
+        Ok(())
+    } else {
+        Err(ValidationError {
+            code: "invalid_password".into(),
+            message: Some("Email và mật khẩu không hợp lệ.".into()),
+            params: Default::default(),
         })
     }
 }
 
-// and `FromRequest`
-impl<S, T> FromRequest<S> for Timing<T>
-where
-    S: Send + Sync,
-    T: FromRequest<S>,
-{
-    type Rejection = T::Rejection;
+fn validate_device_type(device_type: &str) -> Result<(), ValidationError> {
+    let device_types = ["web", "mobile", "desktop"];
 
-    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        let start = Instant::now();
-        let extractor = T::from_request(req, state).await?;
-        let duration = start.elapsed();
-        Ok(Timing {
-            extractor,
-            duration,
-        })
+    if device_types.contains(&device_type) {
+        Ok(())
+    } else {
+        let mut error = ValidationError::new("invalid_device_type");
+        error.message = Some("Loại thiết bị không hợp lệ.".into());
+        Err(error)
     }
 }
 
-pub async fn login_handler(a: Timing<HeaderMap>, b: Timing<String>) -> &'static str {
-    println!("{:#?}", a.duration);
-    println!("{:#?}", a.extractor);
-    println!("{:#?}", b.duration);
-    println!("{:#?}", b.extractor);
+pub async fn login_handler(
+    ValidatedBodyJson(payload): ValidatedBodyJson<LoginPayload>,
+) -> impl IntoResponse {
+    println!("{:#?}", payload);
+
     "Ok"
 }

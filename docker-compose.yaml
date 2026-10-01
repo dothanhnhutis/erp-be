@@ -1,0 +1,74 @@
+services:
+  postgres:
+    container_name: erp-pg
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=pgdb
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    ports:
+      - 5433:5432
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_partman_bgw
+      -c pg_partman_bgw.dbname=pgdb
+      -c pg_partman_bgw.interval=10
+      -c pg_partman_bgw.role=admin
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # - ./db/initdb:/docker-entrypoint-initdb.d
+      # # Mount file CSV vào một thư mục tạm trong container để Postgres có thể đọc
+      # - ./db/seed:/tmp
+    networks:
+      - mynet
+
+  # redis:
+  #   container_name: redis_container
+  #   image: redis:7-alpine
+  #   restart: always
+  #   # appendonly: bật AOF để dữ liệu cache phiên không mất khi restart
+  #   command: redis-server --appendonly yes
+  #   ports:
+  #     - 6379:6379
+  #   volumes:
+  #     - redis_data:/data
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 3s
+  #     retries: 5
+  #   networks:
+  #     - mynet
+
+  # rabbitmq:
+  #   container_name: rabbitmq_container
+  #   image: rabbitmq:3-management-alpine
+  #   restart: always
+  #   ports:
+  #     - 5672:5672 # AMQP
+  #     - 15672:15672 # Management UI (guest/guest)
+  #   environment:
+  #     - RABBITMQ_DEFAULT_USER=guest
+  #     - RABBITMQ_DEFAULT_PASS=guest
+  #   volumes:
+  #     - rabbitmq_data:/var/lib/rabbitmq
+  #   healthcheck:
+  #     test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   networks:
+  #     - mynet
+
+networks:
+  mynet:
+    driver: bridge
+
+volumes:
+  postgres_data:
+#   redis_data:
+#   rabbitmq_data:
