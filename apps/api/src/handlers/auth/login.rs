@@ -1,5 +1,5 @@
-use crate::extractors::validate::ValidatedBodyJson;
-use axum::response::IntoResponse;
+use crate::{extractors::validate::ValidatedBodyJson, state::AppState};
+use axum::{extract::State, response::IntoResponse};
 use serde::Deserialize;
 use validator::{Validate, ValidationError};
 
@@ -54,6 +54,7 @@ fn validate_device_type(device_type: &str) -> Result<(), ValidationError> {
 }
 
 pub async fn login_handler(
+    State(state): State<AppState>,
     ValidatedBodyJson(payload): ValidatedBodyJson<LoginPayload>,
 ) -> impl IntoResponse {
     println!("{:#?}", payload);

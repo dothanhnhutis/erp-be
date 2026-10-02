@@ -8,12 +8,13 @@ mod state;
 
 use axum::Router;
 use http::RouterExt;
-use infrastructure::postgres::pool::init_db_pool;
 use shared::config::AppConfig;
 use tokio::net::TcpListener;
 
 use routes::create_router;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
+
+use crate::state::init_state;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -34,9 +35,13 @@ async fn main() -> anyhow::Result<()> {
         .with(fmt::layer().json().flatten_event(true)) // flatten giúp đẩy các field tùy biến ra ngoài layer gốc của JSON
         .init();
 
+    // state
+    let shared_state = init_state(&config).await;
+
     let app = Router::new()
         .nest("/api", create_router())
-        .with_http_tracing();
+        .with_http_tracing()
+        .with_state(shared_state);
 
     let addr = format!("{}:{}", config.server_host, config.server_port);
     let listener = TcpListener::bind(&addr).await?;
