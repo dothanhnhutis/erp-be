@@ -8,14 +8,14 @@ services:
     environment:
       - POSTGRES_USER=admin
       - POSTGRES_PASSWORD=secret
-      - POSTGRES_DB=pgdb
+      - POSTGRES_DB=erp-db
       - PGDATA=/var/lib/postgresql/data/pgdata
     ports:
       - 5433:5432
     command: >
       postgres
       -c shared_preload_libraries=pg_partman_bgw
-      -c pg_partman_bgw.dbname=pgdb
+      -c pg_partman_bgw.dbname=erp-db
       -c pg_partman_bgw.interval=10
       -c pg_partman_bgw.role=admin
     volumes:

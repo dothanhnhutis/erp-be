@@ -5,17 +5,19 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- ==========================================================
 -- Config
 -- ==========================================================
-ALTER DATABASE pgdb
-    SET
-        datestyle = 'ISO, DMY';
-
-ALTER DATABASE pgdb
-    SET
-        timezone = 'Asia/Ho_Chi_Minh';
+-- Không gắn cứng tên database: dùng current_database() để chạy được trên mọi môi trường.
+-- Lưu ý: ALTER DATABASE ... SET chỉ có hiệu lực với các kết nối MỚI.
+DO
+$$
+    BEGIN
+        EXECUTE format('ALTER DATABASE %I SET datestyle = %L', current_database(), 'ISO, DMY');
+        EXECUTE format('ALTER DATABASE %I SET timezone = %L', current_database(), 'Asia/Ho_Chi_Minh');
+    END
+$$;
 
 
 -- create user_sessions table
-CREATE TABLE user_sessions
+CREATE TABLE IF NOT EXISTS user_sessions
 (
     id            UUID           NOT NULL DEFAULT uuidv7(),
     user_id       UUID           NOT NULL,
@@ -455,6 +457,7 @@ BEGIN
         WHERE t.table_schema = 'public'
           AND t.table_type = 'BASE TABLE'
           AND t.table_name NOT LIKE 'audit_logs%'
+          AND t.table_name <> '_sqlx_migrations' -- loại trừ: bảng theo dõi migration của sqlx
           AND t.table_name <> 'user_sessions'   -- loại trừ: tránh audit phình + lọt token_hash do last_seen_at cập nhật mỗi request
     LOOP
         -- Khai báo Trigger Insert/Delete
@@ -517,5 +520,3 @@ UPDATE partman.part_config
 SET retention            = '1 year',
     retention_keep_table = false   -- false = DROP partition cũ; true = chỉ detach (vẫn giữ disk)
 WHERE parent_table = 'public.audit_logs';
-
-

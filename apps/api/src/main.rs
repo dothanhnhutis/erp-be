@@ -4,6 +4,7 @@ mod handlers;
 mod http;
 mod logger;
 mod routes;
+mod state;
 
 use axum::Router;
 use http::RouterExt;
@@ -13,6 +14,7 @@ use tokio::net::TcpListener;
 
 use routes::create_router;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // load env: .env không bắt buộc (prod có thể set biến thật); file sai cú pháp vẫn báo lỗi
@@ -31,10 +33,6 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::EnvFilter::new(&config.log_filter))
         .with(fmt::layer().json().flatten_event(true)) // flatten giúp đẩy các field tùy biến ra ngoài layer gốc của JSON
         .init();
-
-    let pool = init_db_pool(&config.database_url)
-        .await
-        .expect("không kết nối được database");
 
     let app = Router::new()
         .nest("/api", create_router())
