@@ -6,7 +6,11 @@ publish.workspace = true
 
 
 [dependencies]
+domain = {path = "../domain"}
+
+
 sqlx.workspace = true
 argon2.workspace = true
 tokio.workspace = true
 dotenvy.workspace = true
+uuid.workspace = true

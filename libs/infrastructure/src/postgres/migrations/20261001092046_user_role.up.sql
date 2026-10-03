@@ -21,12 +21,14 @@ CREATE TABLE IF NOT EXISTS user_sessions
 (
     id            UUID           NOT NULL DEFAULT uuidv7(),
     user_id       UUID           NOT NULL,
-    token_hash    CHAR(64)       NOT NULL UNIQUE,
-    device_id     VARCHAR(255),            -- Fingerprint do client tự tạo, dùng để nhận ra "cùng máy" dù đổi IP
+
+    refresh_token_hash    CHAR(64)       NOT NULL,
+    previous_token_hash   CHAR(64),
+    rotated_at         TIMESTAMPTZ(3),
+
     device_name   VARCHAR(255),            -- Human-readable: "Chrome 124 · Windows 11", "MyApp 2.1 · macOS 14"
     device_type   VARCHAR(20)    NOT NULL, -- 'web' | 'desktop' | 'mobile'
-    platform      VARCHAR(100),            -- "Windows 11" | "macOS 14.5" | "Ubuntu 22.04"
-    app_version   VARCHAR(50),             -- Chỉ có trên desktop app, null với web
+    app_version   VARCHAR(50),             -- desktop: version app; web: version bản build frontend
     user_agent    TEXT,                    -- Raw User-Agent header, dùng để debug
     ip_address    INET,                    -- IP lúc login, dùng để hiển thị "đăng nhập từ đâu"
 
@@ -37,10 +39,10 @@ CREATE TABLE IF NOT EXISTS user_sessions
     -- 'USER'   : user thu hồi
     -- 'EXPIRED' : cleanup job đánh dấu sau khi hết hạn
 
-    expires_at    TIMESTAMPTZ(3) NOT NULL,
+    expires_at    TIMESTAMPTZ(3) NOT NULL,         -- hạn trượt (gia hạn mỗi lần refresh)
+    absolute_expires_at  TIMESTAMPTZ(3) NOT NULL,  -- hạn cuối cùng
     created_at    TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
-    updated_at    TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
-    last_seen_at  TIMESTAMPTZ(3),          -- hoạt động gần nhất (cập nhật mỗi request; xem ghi chú audit B1)
+    last_used_at  TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
 
     CONSTRAINT chk_revoke_reason
         CHECK (revoke_reason IN ('LOGOUT', 'FORCED', 'USER', 'EXPIRED')),

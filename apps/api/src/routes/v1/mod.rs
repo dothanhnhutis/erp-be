@@ -9,7 +9,9 @@ where
     S: Clone + Send + Sync + 'static,
     AppState: FromRef<S>,
 {
-    Router::new()
-        .nest("/auth", auth::create_routes())
-        .nest("/users", user::create_routes())
+    let public_route = Router::new().nest("/auth", auth::create_routes());
+
+    let private_route = Router::new().nest("/users", user::create_routes());
+
+    public_route.merge(private_route)
 }

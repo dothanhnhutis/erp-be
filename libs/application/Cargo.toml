@@ -1,0 +1,17 @@
+[package]
+name = "application"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+infrastructure = { path = "../infrastructure" }
+domain = { path = "../domain" }
+shared = { path = "../shared" }
+
+thiserror.workspace = true
+validator.workspace = true
+serde.workspace = true
+argon2.workspace = true
+chrono.workspace = true
+tokio.workspace = true
