@@ -47,29 +47,29 @@ where
             AppError::Unauthorized("Tài khoản chưa kích hoạt. Vui lòng kiểm tra email.".into())
         })?;
 
-        // let ok = tokio::task::spawn_blocking(move || {
-        //     argon2::PasswordHash::new(&hash_str)
-        //         .map(|h| {
-        //             argon2::Argon2::default()
-        //                 .verify_password(request.password.as_bytes(), &h)
-        //                 .is_ok()
-        //         })
-        //         .unwrap_or(false)
-        // })
-        // .await
-        // .map_err(|e| AppError::Internal(e.to_string()))?;
-        // if !ok {
-        //     return Err(AppError::Unauthorized(
-        //         "Email hoặc mật khẩu không đúng".into(),
-        //     ));
-        // }
+        let ok = tokio::task::spawn_blocking(move || {
+            argon2::PasswordHash::new(&hash_str)
+                .map(|h| {
+                    argon2::Argon2::default()
+                        .verify_password(request.password.as_bytes(), &h)
+                        .is_ok()
+                })
+                .unwrap_or(false)
+        })
+        .await
+        .map_err(|e| AppError::Internal(format!("Invalid password hash: {}", e)))?;
+        if !ok {
+            return Err(AppError::Unauthorized(
+                "Email hoặc mật khẩu không đúng".into(),
+            ));
+        }
 
-        let parsed = argon2::PasswordHash::new(&hash_str)
-            .map_err(|e| AppError::Internal(format!("Invalid password hash: {}", e)))?;
+        // let parsed = argon2::PasswordHash::new(&hash_str)
+        //     .map_err(|e| AppError::Internal(format!("Invalid password hash: {}", e)))?;
 
-        argon2::Argon2::default()
-            .verify_password(request.password.as_bytes(), &parsed)
-            .map_err(|_| AppError::Unauthorized("Email hoặc mật khẩu không đúng".into()))?;
+        // argon2::Argon2::default()
+        //     .verify_password(request.password.as_bytes(), &parsed)
+        //     .map_err(|_| AppError::Unauthorized("Email hoặc mật khẩu không đúng".into()))?;
 
         let token = SessionToken::generate();
         let expires_at = chrono::Utc::now() + self.session_ttl;
