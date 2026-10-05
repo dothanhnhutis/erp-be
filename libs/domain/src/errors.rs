@@ -3,6 +3,9 @@ pub enum DomainError {
     #[error("Trạng thái user không hợp lệ: {0}")]
     InvalidUserStatus(String),
 
+    #[error("Loại thiết bị không hợp lệ: {0}")]
+    InvalidDeviceType(String),
+
     #[error("Email không hợp lệ: {0}")]
     InvalidEmail(String),
 

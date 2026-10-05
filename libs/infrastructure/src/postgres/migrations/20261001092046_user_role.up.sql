@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS user_sessions
     expires_at    TIMESTAMPTZ(3) NOT NULL,         -- hạn trượt (gia hạn mỗi lần refresh)
     absolute_expires_at  TIMESTAMPTZ(3) NOT NULL,  -- hạn cuối cùng
     created_at    TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
-    last_used_at  TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
 
     CONSTRAINT chk_revoke_reason
         CHECK (revoke_reason IN ('LOGOUT', 'FORCED', 'USER', 'EXPIRED')),

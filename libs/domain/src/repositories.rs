@@ -48,3 +48,7 @@ pub trait UserRepo: Send + Sync {
         email: &str,
     ) -> impl Future<Output = Result<Option<User>, RepositoryError>> + Send;
 }
+
+pub trait SessionRepo: Send + Sync {
+    fn create(&self) -> impl Future<Output = Result<Session, RepositoryError>> + Send;
+}
