@@ -1,8 +1,9 @@
 use std::net::{IpAddr, SocketAddr};
 
-use crate::{extractors::validate::ValidatedBodyJson, state::AppState};
-use application::dto::auth_dto::ClientContext;
+use crate::{error::ApiError, extractors::validate::ValidatedBodyJson, state::AppState};
+use application::dto::auth_dto::{ClientContext, LoginRequest};
 use axum::{
+    Json,
     extract::{ConnectInfo, State},
     http::HeaderMap,
     response::IntoResponse,
@@ -11,59 +12,6 @@ use axum_extra::extract::{
     CookieJar,
     cookie::{Cookie, SameSite},
 };
-use domain::repositories::UserRepo;
-use serde::Deserialize;
-use validator::{Validate, ValidationError};
-
-#[derive(Debug, Validate, Deserialize)]
-pub struct LoginPayload {
-    #[validate(email)]
-    email: String,
-    #[validate(
-        length(min = 1, message = "Email và mật khẩu không hợp lệ."),
-        custom(function = "validate_password")
-    )]
-    pub password: String,
-    pub app_version: Option<String>,
-    pub platform: Option<String>,
-    #[validate(custom(function = "validate_device_type"))]
-    pub device_type: String,
-    pub device_name: Option<String>,
-    pub device_id: Option<String>,
-}
-
-fn validate_password(password: &str) -> Result<(), ValidationError> {
-    let mut has_uppercase = false;
-    let mut has_lowercase = false;
-    let mut has_digit = false;
-
-    for c in password.chars() {
-        has_uppercase |= c.is_ascii_uppercase();
-        has_lowercase |= c.is_ascii_lowercase();
-        has_digit |= c.is_ascii_digit();
-    }
-    if !password.is_empty() && has_uppercase && has_lowercase && has_digit {
-        Ok(())
-    } else {
-        Err(ValidationError {
-            code: "invalid_password".into(),
-            message: Some("Email và mật khẩu không hợp lệ.".into()),
-            params: Default::default(),
-        })
-    }
-}
-
-fn validate_device_type(device_type: &str) -> Result<(), ValidationError> {
-    let device_types = ["web", "mobile", "desktop"];
-
-    if device_types.contains(&device_type) {
-        Ok(())
-    } else {
-        let mut error = ValidationError::new("invalid_device_type");
-        error.message = Some("Loại thiết bị không hợp lệ.".into());
-        Err(error)
-    }
-}
 
 // Đọc IP client: ưu tiên `X-Forwarded-For` (token đầu) → `X-Real-IP` → địa chỉ peer.
 // Chỉ chấp nhận giá trị parse được thành `IpAddr` để tránh fail cast `::inet` (500).
@@ -118,8 +66,8 @@ pub async fn login_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    ValidatedBodyJson(payload): ValidatedBodyJson<LoginPayload>,
-) -> impl IntoResponse {
+    ValidatedBodyJson(payload): ValidatedBodyJson<LoginRequest>,
+) -> Result<impl IntoResponse, ApiError> {
     let ctx = ClientContext {
         user_agent: user_agent(&headers),
         ip_address: Some(client_ip(&headers, peer)),
@@ -132,8 +80,15 @@ pub async fn login_handler(
 
     let response = state.auth_service.login(payload, ctx).await?;
 
-    println!("{:#?}", user);
-    println!("{:#?}", payload);
+    println!("{:#?}", response);
+    // println!("{:#?}", payload);
+
+    let cookie = session_cookie(
+        response.session.clone(),
+        false,
+        Some(""),
+        Some(time::Duration::seconds(response.expires_in)),
+    );
 
     // (CookieJar, Json): jar là IntoResponseParts nên đứng trước body.
     Ok((jar.add(cookie), Json(response)))

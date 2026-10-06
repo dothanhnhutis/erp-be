@@ -16,7 +16,13 @@
 //     ) -> impl Future<Output = Result<Option<User>, RepositoryError>> + Send;
 // }
 // 2 cái trên là như nhau
-use crate::{entities::user::User, errors::DomainError};
+use crate::{
+    entities::{
+        session::{NewSession, Session},
+        user::User,
+    },
+    errors::DomainError,
+};
 use uuid;
 
 #[derive(Debug, thiserror::Error)]
@@ -50,5 +56,8 @@ pub trait UserRepo: Send + Sync {
 }
 
 pub trait SessionRepo: Send + Sync {
-    fn create(&self) -> impl Future<Output = Result<Session, RepositoryError>> + Send;
+    fn create(
+        &self,
+        new_session: NewSession,
+    ) -> impl Future<Output = Result<Session, RepositoryError>> + Send;
 }

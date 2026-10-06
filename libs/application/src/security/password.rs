@@ -1,15 +1,14 @@
 use argon2::{
     Argon2,
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
+    password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash},
 };
 
 use crate::errors::AppError;
 
 /// Hash mật khẩu mới (argon2id, salt ngẫu nhiên) → chuỗi PHC để lưu DB.
 pub fn hash_password(plain: &str) -> Result<String, AppError> {
-    let salt = SaltString::generate(&mut OsRng);
     Argon2::default()
-        .hash_password(plain.as_bytes(), &salt)
+        .hash_password(plain.as_bytes())
         .map(|h| h.to_string())
         .map_err(|e| AppError::Internal(format!("Lỗi hash mật khẩu: {e}")))
 }

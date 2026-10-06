@@ -9,8 +9,8 @@ pub struct Session {
     pub id: Uuid,
     pub user_id: Uuid,
     pub refresh_token_hash: String,
-    pub previous_token_hash: String,
-    pub rotated_at: DateTime<Utc>,
+    pub previous_token_hash: Option<String>,
+    pub rotated_at: Option<DateTime<Utc>>,
     pub device_name: Option<String>,
     pub device_type: DeviceType,
     pub app_version: Option<String>,
@@ -54,4 +54,17 @@ impl std::str::FromStr for DeviceType {
             other => Err(DomainError::InvalidDeviceType(other.to_owned())),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct NewSession {
+    pub user_id: Uuid,
+    pub refresh_token_hash: String,
+    pub device_name: Option<String>,
+    pub device_type: DeviceType,
+    pub app_version: Option<String>,
+    pub user_agent: Option<String>,
+    pub ip_address: Option<String>,
+    pub expires_at: DateTime<Utc>,
+    pub absolute_expires_at: DateTime<Utc>,
 }

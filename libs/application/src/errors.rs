@@ -27,6 +27,7 @@ impl From<DomainError> for AppError {
         match e {
             DomainError::InvalidEmail(m)
             | DomainError::InvalidUserStatus(m)
+            | DomainError::InvalidDeviceType(m)
             | DomainError::InvalidRoleStatus(m)
             | DomainError::InvalidPasswordTokenType(m)
             | DomainError::RevokedPasswordToken(m) => AppError::Validation(m),

@@ -1,3 +1,4 @@
+use application::errors::AppError;
 use axum::{
     Json,
     extract::rejection::JsonRejection,
@@ -14,7 +15,10 @@ pub enum ApiError {
     JsonRejection(#[from] JsonRejection), // input: body hỏng / sai content-type / sai kiểu
 
     #[error(transparent)]
-    Validation(#[from] ValidationErrors), // input: fail rule validator (email, length...)
+    Validation(#[from] ValidationErrors),
+
+    #[error(transparent)]
+    Domain(#[from] AppError), // nghiệp vụ bubble từ use case lên // input: fail rule validator (email, length...)
 }
 
 impl IntoResponse for ApiError {
@@ -31,13 +35,25 @@ impl IntoResponse for ApiError {
                 Json(json!({ "errors": fields_to_json(&errors) })),
             )
                 .into_response(),
-            _ => (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({ "errors": "lỗi chưa được xử lý" })),
-            )
-                .into_response(),
+            ApiError::Domain(err) => domain_to_response(err),
         }
     }
+}
+
+fn domain_to_response(err: AppError) -> Response {
+    let (status, msg) = match err {
+        AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
+        AppError::Validation(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg),
+        AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
+        AppError::Internal(msg) => {
+            tracing::error!("Internal error: {msg}"); // log đầy đủ phía server
+            (StatusCode::INTERNAL_SERVER_ERROR, "Lỗi hệ thống".to_owned()) // client nhận câu chung
+        }
+        AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
+
+        AppError::Conflict(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
+    };
+    (status, Json(json!({ "error": msg }))).into_response()
 }
 
 fn fields_to_json(errors: &ValidationErrors) -> serde_json::Value {

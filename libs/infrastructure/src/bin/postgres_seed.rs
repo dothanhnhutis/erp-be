@@ -5,11 +5,9 @@
 //
 // Chạy: ADMIN_EMAIL=admin@company.vn ADMIN_PASSWORD='...' cargo run -p infrastructure --bin postgres_seed
 
-use argon2::{
-    Argon2,
-    password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
-};
+use argon2::{Argon2, password_hash::PasswordHasher};
 use std::env;
+use tokio::task;
 
 /// Trùng với tên vai trò trong migration default_roles_permissions
 const ADMIN_ROLE_NAME: &str = "ADMIN";
@@ -27,11 +25,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Phải dùng CÙNG thuật toán với phần verify mật khẩu lúc đăng nhập trong apps/api
-    let salt = SaltString::generate(&mut OsRng);
-    let password_hash = Argon2::default()
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(|e| e.to_string())?
-        .to_string();
+    let password_hash: String = task::spawn_blocking(move || {
+        Argon2::default()
+            .hash_password(password.as_bytes())
+            .map(|h| h.to_string()) // PasswordHash -> chuỗi PHC để lưu DB
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())??; // `?` ngoài: JoinError, `?` trong: lỗi hash
 
     let mut tx = pool.begin().await?;
 
