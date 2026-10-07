@@ -316,10 +316,14 @@ $$
         trg_name TEXT;
     BEGIN
         FOR r IN
-            SELECT table_schema, table_name
-            FROM information_schema.columns
-            WHERE column_name = 'updated_at'
-              AND table_schema = 'public'
+            SELECT c.table_schema, c.table_name
+            FROM information_schema.columns c
+                     JOIN information_schema.tables t
+                          ON c.table_schema = t.table_schema
+                              AND c.table_name = t.table_name
+                              AND t.table_type = 'BASE TABLE'
+            WHERE c.column_name = 'updated_at'
+              AND c.table_schema = 'public'
             LOOP
                 trg_name := format('trg_updated_at_%s', r.table_name);
 

@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
@@ -60,9 +61,7 @@ fn validate_device_type(device_type: &str) -> Result<(), ValidationError> {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginResponse {
-    pub user_id: String,
-    /// Token session THÔ — desktop dùng làm bearer, web app lưu trong cookie.
-    pub session: String,
-    /// Thời gian sống của session, tính bằng giây.
-    pub expires_in: i64,
+    pub tokem: String,
+    pub refresh_token: String,
+    pub expires_at: DateTime<Utc>,
 }

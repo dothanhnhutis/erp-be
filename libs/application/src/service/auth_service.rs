@@ -4,7 +4,7 @@ use std::str::FromStr;
 use crate::{
     dto::auth_dto::{ClientContext, LoginRequest, LoginResponse},
     errors::AppError,
-    security::tokens::new_refresh,
+    security::tokens::{Claims, issue_access, new_refresh},
 };
 use argon2::PasswordVerifier;
 use domain::{
@@ -83,7 +83,8 @@ where
         }
 
         let token = new_refresh();
-        let expires_at = chrono::Utc::now() + self.session_ttl;
+        let now = chrono::Utc::now();
+        let expires_at = now + self.session_ttl;
 
         let new_session = NewSession {
             user_id: user.id,
@@ -99,11 +100,16 @@ where
 
         let new_session = self.session_repo.create(new_session).await?;
 
+        let claims = Claims {
+            sub: user.id,
+            sid: new_session.id,
+            iat: now.timestamp(),
+            exp: (now + ACCESS_TTL).timestamp(),
+        };
+
+        let token = issue_access("sss".to_string(), claims)?;
+
         // 5. Return response — trả token THÔ cho client
-        Ok(LoginResponse {
-            user_id: user.id.to_string(),
-            session: format!("{}.{}", new_session.id, token.raw),
-            expires_in: self.session_ttl.num_seconds(),
-        })
+        Ok(LoginResponse { tokem: expires_at })
     }
 }

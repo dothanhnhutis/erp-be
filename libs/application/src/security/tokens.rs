@@ -1,16 +1,11 @@
 use crate::errors::AppError;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::{Duration, Utc};
 use ctutils::CtEq;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
-
-/// Access token sống ngắn: thu hồi phiên sẽ có hiệu lực chậm nhất sau chừng này
-/// (trừ khi bị chặn sớm hơn bằng revoked-cache, xem auth.rs).
-pub const ACCESS_TTL: Duration = Duration::minutes(10);
 
 /// Số byte ngẫu nhiên trước khi hex-encode. 32 byte = 256-bit entropy.
 const TOKEN_BYTES: usize = 32;
@@ -31,14 +26,7 @@ pub struct Claims {
     pub exp: i64,
 }
 
-pub fn issue_access(key: &EncodingKey, user_id: Uuid, sid: Uuid) -> Result<String, AppError> {
-    let now = Utc::now();
-    let claims = Claims {
-        sub: user_id,
-        sid,
-        iat: now.timestamp(),
-        exp: (now + ACCESS_TTL).timestamp(),
-    };
+pub fn issue_access(key: &EncodingKey, claims: Claims) -> Result<String, AppError> {
     encode(&Header::new(Algorithm::HS256), &claims, key)
         .map_err(|e| AppError::Internal(e.to_string()))
 }

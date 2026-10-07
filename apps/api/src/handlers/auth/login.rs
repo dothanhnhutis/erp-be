@@ -73,11 +73,6 @@ pub async fn login_handler(
         ip_address: Some(client_ip(&headers, peer)),
     };
 
-    // let user = state
-    //     .pg_user_repo
-    //     .find_by_email("dothanhnhutis@gmail.com")
-    //     .await;
-
     let response = state.auth_service.login(payload, ctx).await?;
 
     println!("{:#?}", response);
