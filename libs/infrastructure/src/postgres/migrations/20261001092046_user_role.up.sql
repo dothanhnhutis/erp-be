@@ -276,26 +276,22 @@ ALTER TABLE files
 -- View: phiên đăng nhập đang hoạt động (phục vụ "quản lý phiên của tôi")
 -- KHÔNG lộ token_hash / user_agent. App PHẢI tự lọc WHERE user_id = <current user>.
 -- ==========================================================
--- CREATE OR REPLACE VIEW active_user_sessions AS
--- SELECT id,
---        user_id,
---        refresh_token_hash,
---        previous_token_hash,
---        rotated_at,
---        device_name,
---        device_type,
---        app_version,
---        user_agent,
---        ip_address,
---        revoked_at,
---        revoke_reason,
---        expires_at,
---        absolute_expires_at,
---        created_at,
---        updated_at
--- FROM user_sessions
--- WHERE revoked_at IS NULL
---   AND expires_at > NOW();
+CREATE OR REPLACE VIEW active_user_sessions AS
+SELECT
+    id,
+    user_id,
+    rotated_at,
+    device_name,
+    device_type,
+    app_version,
+    ip_address,
+    expires_at,
+    absolute_expires_at,
+    created_at,
+    updated_at
+FROM user_sessions
+WHERE revoked_at IS NULL
+  AND expires_at > NOW();
 
 
 --- trigger set_updated_at

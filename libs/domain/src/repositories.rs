@@ -1,11 +1,11 @@
-//
+// viết gọn
 // pub trait UserRepo: Send + Sync {
 //     fn find_by_id(
 //         &self,
 //         id: uuid::Uuid,
 //     ) -> impl Future<Output = Result<Option<User>, RepositoryError>> + Send;
 // }
-
+// viết đầy đủ
 // pub trait UserRepo
 // where
 //     Self: Send + Sync,
