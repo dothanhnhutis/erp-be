@@ -61,7 +61,8 @@ fn validate_device_type(device_type: &str) -> Result<(), ValidationError> {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginResponse {
-    pub tokem: String,
+    pub access_token: String,
     pub refresh_token: String,
-    pub expires_at: DateTime<Utc>,
+    pub access_token_expires_at: DateTime<Utc>,
+    pub refresh_token_expires_at: DateTime<Utc>,
 }

@@ -1,4 +1,5 @@
 use chrono::Duration;
+use jsonwebtoken::EncodingKey;
 use std::str::FromStr;
 
 use crate::{
@@ -22,7 +23,10 @@ where
 {
     user_repo: UR,
     session_repo: USR,
-    session_ttl: Duration,
+    jwt_enc: EncodingKey,
+    access_token_ttl: Duration,
+    refresh_token_ttl: Duration,
+    max_refresh_token_ttl: Duration,
 }
 
 impl<UR, USR> AuthService<UR, USR>
@@ -30,11 +34,21 @@ where
     UR: UserRepo,
     USR: SessionRepo,
 {
-    pub fn new(user_repo: UR, session_repo: USR, session_ttl: Duration) -> Self {
+    pub fn new(
+        user_repo: UR,
+        session_repo: USR,
+        jwt_enc: EncodingKey,
+        access_token_ttl: Duration,
+        refresh_token_ttl: Duration,
+        max_refresh_token_ttl: Duration,
+    ) -> Self {
         Self {
             user_repo,
             session_repo,
-            session_ttl,
+            jwt_enc,
+            access_token_ttl,
+            refresh_token_ttl,
+            max_refresh_token_ttl,
         }
     }
 
@@ -84,7 +98,9 @@ where
 
         let token = new_refresh();
         let now = chrono::Utc::now();
-        let expires_at = now + self.session_ttl;
+        let access_token_ttl = now + self.access_token_ttl;
+        let expires_at = now + self.refresh_token_ttl;
+        let absolute_expires_at = now + self.max_refresh_token_ttl;
 
         let new_session = NewSession {
             user_id: user.id,
@@ -95,7 +111,7 @@ where
             user_agent: ctx.user_agent,
             ip_address: ctx.ip_address,
             expires_at,
-            absolute_expires_at: expires_at,
+            absolute_expires_at,
         };
 
         let new_session = self.session_repo.create(new_session).await?;
@@ -104,12 +120,17 @@ where
             sub: user.id,
             sid: new_session.id,
             iat: now.timestamp(),
-            exp: (now + ACCESS_TTL).timestamp(),
+            exp: access_token_ttl.timestamp(),
         };
 
-        let token = issue_access("sss".to_string(), claims)?;
+        let access_token = issue_access(&self.jwt_enc, claims)?;
 
         // 5. Return response — trả token THÔ cho client
-        Ok(LoginResponse { tokem: expires_at })
+        Ok(LoginResponse {
+            access_token,
+            access_token_expires_at: access_token_ttl,
+            refresh_token: format!("{}.{}", new_session.id, token.raw),
+            refresh_token_expires_at: expires_at,
+        })
     }
 }

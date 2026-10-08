@@ -12,6 +12,7 @@ use axum_extra::extract::{
     CookieJar,
     cookie::{Cookie, SameSite},
 };
+use chrono::{DateTime, Utc};
 
 // Đọc IP client: ưu tiên `X-Forwarded-For` (token đầu) → `X-Real-IP` → địa chỉ peer.
 // Chỉ chấp nhận giá trị parse được thành `IpAddr` để tránh fail cast `::inet` (500).
@@ -37,25 +38,36 @@ fn user_agent(headers: &HeaderMap) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-// Cookie `session` với thuộc tính dùng chung. `max_age = None` (kèm value rỗng) dùng để xóa cookie —
-// PHẢI khớp `path`/`domain` với cookie lúc login thì trình duyệt mới gỡ.
-fn session_cookie(
-    value: String,
-    secure: bool,
-    domain: Option<&str>,
-    max_age: Option<time::Duration>,
-) -> Cookie<'static> {
-    let mut builder = Cookie::build(("session", value))
-        .http_only(true)
-        .secure(secure)
-        .same_site(SameSite::Lax)
-        .path("/");
+pub struct CookieOptions<'a> {
+    pub path: &'a str,
+    pub same_site: SameSite,
+    pub secure: bool,
+    pub domain: Option<&'a str>,
+    pub expires_at: Option<DateTime<Utc>>,
+}
 
-    if let Some(d) = domain {
+pub fn build_cookie(
+    name: impl Into<String>,
+    value: impl Into<String>,
+    opts: CookieOptions<'_>,
+) -> Cookie<'static> {
+    let mut builder = Cookie::build((name.into(), value.into()))
+        .http_only(true)
+        .secure(opts.secure)
+        .same_site(opts.same_site)
+        .path(opts.path.to_owned());
+
+    if let Some(d) = opts.domain.filter(|d| !d.trim().is_empty()) {
         builder = builder.domain(d.to_owned());
     }
-    if let Some(age) = max_age {
-        builder = builder.max_age(age);
+
+    if let Some(expiry) = opts.expires_at {
+        let remaining = (expiry - Utc::now()).num_seconds().max(0);
+        builder = builder.max_age(time::Duration::seconds(remaining));
+
+        if let Ok(t) = time::OffsetDateTime::from_unix_timestamp(expiry.timestamp()) {
+            builder = builder.expires(t);
+        }
     }
 
     builder.build()
@@ -75,16 +87,30 @@ pub async fn login_handler(
 
     let response = state.auth_service.login(payload, ctx).await?;
 
-    println!("{:#?}", response);
-    // println!("{:#?}", payload);
-
-    let cookie = session_cookie(
-        response.session.clone(),
-        false,
-        Some(""),
-        Some(time::Duration::seconds(response.expires_in)),
+    let access_cookie = build_cookie(
+        state.config.access_token_name.clone(),
+        response.access_token.clone(),
+        CookieOptions {
+            path: "/",
+            same_site: SameSite::Lax,
+            secure: state.config.cookie_secure,
+            domain: state.config.cookie_domain.as_deref(),
+            expires_at: Some(response.access_token_expires_at),
+        },
     );
 
-    // (CookieJar, Json): jar là IntoResponseParts nên đứng trước body.
-    Ok((jar.add(cookie), Json(response)))
+    let refresh_cookie = build_cookie(
+        state.config.refresh_token_name.clone(),
+        response.refresh_token.clone(),
+        CookieOptions {
+            path: "/api/v1/auth", // chỉ gửi cho các route auth
+            same_site: SameSite::Strict,
+            secure: state.config.cookie_secure,
+            domain: state.config.cookie_domain.as_deref(),
+            expires_at: Some(response.refresh_token_expires_at),
+        },
+    );
+
+    let jar = jar.add(access_cookie).add(refresh_cookie);
+    Ok((jar, Json(response)))
 }

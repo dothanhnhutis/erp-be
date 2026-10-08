@@ -6,12 +6,16 @@ mod logger;
 mod routes;
 mod state;
 
-use axum::Router;
+use axum::{
+    Router,
+    http::{HeaderName, HeaderValue, Method, header},
+};
 use core::net::SocketAddr;
 use http::RouterExt;
 use routes::create_router;
 use shared::config::AppConfig;
 use tokio::net::TcpListener;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::state::init_state;
@@ -35,11 +39,38 @@ async fn main() -> anyhow::Result<()> {
         .with(fmt::layer().json().flatten_event(true)) // flatten giúp đẩy các field tùy biến ra ngoài layer gốc của JSON
         .init();
 
+    // cors
+    let origins: Vec<HeaderValue> = config
+        .cors_allowed_origins
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty()) // Bỏ qua nếu có phần tử rỗng
+        .filter_map(|s| s.parse::<HeaderValue>().ok()) // Parse an toàn, bỏ qua phần tử lỗi
+        .collect();
+
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::list(origins))
+        .allow_credentials(true)
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+        ])
+        .allow_headers([
+            header::AUTHORIZATION,
+            header::CONTENT_TYPE,
+            header::ACCEPT,
+            HeaderName::from_static("x-requested-with"),
+        ]);
+
     // state
-    let shared_state = init_state(&config).await;
+    let shared_state = init_state(config.clone()).await;
 
     let app = Router::new()
         .nest("/api", create_router())
+        .layer(cors)
         .with_http_tracing()
         .with_state(shared_state);
 

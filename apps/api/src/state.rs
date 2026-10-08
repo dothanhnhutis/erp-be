@@ -12,9 +12,10 @@ use shared::config::AppConfig;
 #[derive(Clone, FromRef)]
 pub struct AppState {
     pub auth_service: Arc<AuthService<PgUserRepo, PgSessionRepo>>,
+    pub config: Arc<AppConfig>,
 }
 
-pub async fn init_state(config: &AppConfig) -> AppState {
+pub async fn init_state(config: AppConfig) -> AppState {
     let pool = init_db_pool(&config.database_url)
         .await
         .expect("không kết nối được database");
@@ -25,8 +26,14 @@ pub async fn init_state(config: &AppConfig) -> AppState {
     let auth_service = Arc::new(auth_service::AuthService::new(
         pg_user_repo.clone(),
         pg_session_repo.clone(),
-        Duration::seconds(3600),
+        config.jwt_enc.clone(),
+        Duration::seconds(config.access_token_ttl_secs),
+        Duration::seconds(config.refresh_token_ttl_secs),
+        Duration::seconds(config.max_refresh_token_ttl_secs),
     ));
 
-    AppState { auth_service }
+    AppState {
+        auth_service,
+        config: Arc::new(config),
+    }
 }
