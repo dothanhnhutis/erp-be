@@ -18,7 +18,7 @@ use tokio::net::TcpListener;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::state::init_state;
+use crate::state::AppState;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -66,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
         ]);
 
     // state
-    let shared_state = init_state(config.clone()).await;
+    let shared_state = AppState::new(config.clone()).await;
 
     let app = Router::new()
         .nest("/api", create_router())

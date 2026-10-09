@@ -15,25 +15,27 @@ pub struct AppState {
     pub config: Arc<AppConfig>,
 }
 
-pub async fn init_state(config: AppConfig) -> AppState {
-    let pool = init_db_pool(&config.database_url)
-        .await
-        .expect("không kết nối được database");
+impl AppState {
+    pub async fn new(config: AppConfig) -> Self {
+        let pool = init_db_pool(&config.database_url)
+            .await
+            .expect("không kết nối được database");
 
-    let pg_user_repo = PgUserRepo::new(pool.clone());
-    let pg_session_repo = PgSessionRepo::new(pool.clone());
+        let pg_user_repo = PgUserRepo::new(pool.clone());
+        let pg_session_repo = PgSessionRepo::new(pool.clone());
 
-    let auth_service = Arc::new(auth_service::AuthService::new(
-        pg_user_repo.clone(),
-        pg_session_repo.clone(),
-        config.jwt_enc.clone(),
-        Duration::seconds(config.access_token_ttl_secs),
-        Duration::seconds(config.refresh_token_ttl_secs),
-        Duration::seconds(config.max_refresh_token_ttl_secs),
-    ));
+        let auth_service = Arc::new(auth_service::AuthService::new(
+            pg_user_repo.clone(),
+            pg_session_repo.clone(),
+            config.jwt_enc.clone(),
+            Duration::seconds(config.access_token_ttl_secs),
+            Duration::seconds(config.refresh_token_ttl_secs),
+            Duration::seconds(config.max_refresh_token_ttl_secs),
+        ));
 
-    AppState {
-        auth_service,
-        config: Arc::new(config),
+        Self {
+            auth_service,
+            config: Arc::new(config),
+        }
     }
 }

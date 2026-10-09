@@ -1,26 +1,26 @@
-use crate::error::ApiError;
-use application::errors::AppError;
-use axum::extract::FromRequestParts;
-use axum::http::request::Parts;
-use domain::entities::{session::Session, user::User};
-use serde::Deserialize;
+use axum::{
+    extract::{FromRef, FromRequestParts},
+    http::request,
+};
 
-#[derive(Clone, Debug, Deserialize)]
-pub struct User {
-    pub infor: User,
-    pub session: Session,
-    pub permission_codes: Vec<String>,
-}
+use crate::{error::ApiError, state::AppState};
 
-impl<S> FromRequestParts<S> for User
+pub struct CurrentUser {}
+
+impl<S> FromRequestParts<S> for CurrentUser
 where
-    S: Send + Sync,
+    S: Clone + Send + Sync + 'static,
+    AppState: FromRef<S>,
 {
     type Rejection = ApiError;
+    async fn from_request_parts(
+        parts: &mut request::Parts,
+        state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        let app_state = AppState::from_ref(state);
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        parts.extensions.get::<User>().cloned().ok_or_else(|| {
-            ApiError::Domain(AppError::Unauthorized("Thiếu thông tin xác thực".into()))
-        })
+        let (session, user, permission_codes) = app_state.auth_service.authenticate(&token).await?;
+
+        Ok(CurrentUser {})
     }
 }
