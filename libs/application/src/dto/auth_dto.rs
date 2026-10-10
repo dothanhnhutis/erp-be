@@ -1,5 +1,5 @@
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::{DateTime, SecondsFormat, SubsecRound, Utc};
+use serde::{Deserialize, Serialize, Serializer};
 use validator::{Validate, ValidationError};
 
 /// Metadata lấy từ tầng HTTP (không nằm trong body request).
@@ -59,10 +59,24 @@ fn validate_device_type(device_type: &str) -> Result<(), ValidationError> {
     }
 }
 
+// 1. Định nghĩa hàm serialize tùy chỉnh cho định dạng 3 chữ số millisecond
+fn serialize_dt_to_3millis<S>(dt: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let rounded_dt = dt.round_subsecs(3);
+    // %%.3fZ sẽ tự động làm tròn/cắt và hiển thị đúng 3 chữ số millisecond kèm chữ Z
+    // let s = dt.to_rfc3339_opts(SecondsFormat::Millis, true);
+    let s = rounded_dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+    serializer.serialize_str(&s)
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginResponse {
     pub access_token: String,
     pub refresh_token: String,
+    #[serde(serialize_with = "serialize_dt_to_3millis")]
     pub access_token_expires_at: DateTime<Utc>,
+    #[serde(serialize_with = "serialize_dt_to_3millis")]
     pub refresh_token_expires_at: DateTime<Utc>,
 }

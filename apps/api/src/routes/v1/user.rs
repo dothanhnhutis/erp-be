@@ -1,11 +1,14 @@
-use axum::{Router, extract::FromRef, routing::get};
+use std::sync::Arc;
 
-use crate::{handlers::user::me_handler, state::AppState};
+use axum::{Router, extract::FromRef, routing::get};
+use shared::config::AppConfig;
+
+use crate::{handlers::user, state::AppState};
 
 pub fn create_routes<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
     AppState: FromRef<S>,
 {
-    Router::new().route("/me", get(me_handler))
+    Router::new().route("/me", get(user::me_handler))
 }

@@ -19,7 +19,7 @@ where
     ) -> Result<Self, Self::Rejection> {
         let app_state = AppState::from_ref(state);
 
-        let (session, user, permission_codes) = app_state.auth_service.authenticate(&token).await?;
+        // let (session, user, permission_codes) = app_state.auth_service.authenticate(&token).await?;
 
         Ok(CurrentUser {})
     }

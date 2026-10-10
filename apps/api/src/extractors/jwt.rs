@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::error::ApiError;
 use crate::state::AppState;
 use application::errors::AppError;
@@ -8,8 +6,6 @@ use axum::extract::{FromRef, FromRequestParts};
 use axum::http::request::Parts;
 use axum::http::{HeaderMap, header};
 use axum_extra::extract::CookieJar;
-use serde::Serialize;
-use shared::config::AppConfig;
 
 // JWT
 //  ↓
@@ -23,34 +19,29 @@ use shared::config::AppConfig;
 //  ↓
 // Handler
 
-#[derive(Serialize)]
-pub struct Authentication {
-    session_id: String,
-    user_id: String,
-}
-pub struct AuthClaims(pub Claims);
+pub struct Authentication(pub Claims);
 
-impl<S> FromRequestParts<S> for AuthClaims
+impl<S> FromRequestParts<S> for Authentication
 where
     S: Clone + Send + Sync + 'static,
-    // AppState: FromRef<S>,
-    Arc<AppConfig>: FromRef<S>,
+    AppState: FromRef<S>,
+    // Arc<AppConfig>: FromRef<S>,
 {
     type Rejection = ApiError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        // let app_state = AppState::from_ref(state);
+        let app_state = AppState::from_ref(state);
         // Arc<AppConfig>
-        let config = Arc::<AppConfig>::from_ref(state);
+        // let config = Arc::<AppConfig>::from_ref(state);
         let jar = CookieJar::from_headers(&parts.headers);
-        let token =
-            extract_token(&parts.headers, &jar, &config.access_token_name).ok_or_else(|| {
+        let token = extract_token(&parts.headers, &jar, &app_state.config.access_token_name)
+            .ok_or_else(|| {
                 ApiError::Domain(AppError::Unauthorized("Thiếu thông tin xác thực".into()))
             })?;
 
-        let claims = tokens::verify_access(&config.jwt_dec, &token)?;
+        let claims = tokens::verify_access(&app_state.config.jwt_dec, &token)?;
 
-        Ok(AuthClaims(claims))
+        Ok(Authentication(claims))
     }
 }
 

@@ -80,6 +80,16 @@ const INSERT_SESSION: &str = r#"
         revoked_at, revoke_reason, expires_at, absolute_expires_at, created_at, updated_at
 "#;
 
+const SELECT_SESSION_BY_TOKEN: &str = r#"
+    SELECT
+        id, user_id, token_hash, device_id, device_name, device_type,
+        platform, app_version, user_agent,
+        ip_address::text AS ip_address,
+        revoked_at, revoke_reason, expires_at, created_at, updated_at
+    FROM user_sessions
+    WHERE token_hash = $1
+"#;
+
 impl SessionRepo for PgSessionRepo {
     async fn create(&self, new_session: NewSession) -> Result<Session, RepositoryError> {
         let row: SessionRow = sqlx::query_as(INSERT_SESSION)
@@ -98,5 +108,18 @@ impl SessionRepo for PgSessionRepo {
 
         // Ok(row.try_into())
         Ok(Session::try_from(row)?)
+    }
+
+    async fn find_by_token_hash(
+        &self,
+        token_hash: &str,
+    ) -> Result<Option<Session>, RepositoryError> {
+        let row: Option<SessionRow> = sqlx::query_as(SELECT_SESSION_BY_TOKEN)
+            .bind(token_hash)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_error)?;
+
+        Ok(row.map(Session::from))
     }
 }

@@ -125,7 +125,6 @@ where
 
         let access_token = issue_access(&self.jwt_enc, claims)?;
 
-        // 5. Return response — trả token THÔ cho client
         Ok(LoginResponse {
             access_token,
             access_token_expires_at: access_token_ttl,
@@ -133,4 +132,6 @@ where
             refresh_token_expires_at: expires_at,
         })
     }
+
+    pub async fn authentication(&self, claims: Claims) -> Result<LoginResponse, AppError> {}
 }

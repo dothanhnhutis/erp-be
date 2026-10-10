@@ -3,6 +3,7 @@ mod extractors;
 mod handlers;
 mod http;
 mod logger;
+mod middlewares;
 mod routes;
 mod state;
 
