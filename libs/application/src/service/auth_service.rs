@@ -133,5 +133,9 @@ where
         })
     }
 
-    pub async fn authentication(&self, claims: Claims) -> Result<LoginResponse, AppError> {}
+    pub async fn authentication(&self, claims: Claims) -> Result<LoginResponse, AppError> {
+
+        
+
+        self.session_repo.find_by_token_hash(token_hash)
 }

@@ -82,12 +82,13 @@ const INSERT_SESSION: &str = r#"
 
 const SELECT_SESSION_BY_TOKEN: &str = r#"
     SELECT
-        id, user_id, token_hash, device_id, device_name, device_type,
-        platform, app_version, user_agent,
+        id, user_id, refresh_token_hash, previous_token_hash, rotated_at,
+        device_name, device_type, app_version, user_agent,
         ip_address::text AS ip_address,
-        revoked_at, revoke_reason, expires_at, created_at, updated_at
+        revoked_at, revoke_reason, expires_at, absolute_expires_at,
+        created_at, updated_at
     FROM user_sessions
-    WHERE token_hash = $1
+    WHERE refresh_token_hash = $1 OR previous_token_hash = $1
 "#;
 
 impl SessionRepo for PgSessionRepo {
@@ -120,6 +121,6 @@ impl SessionRepo for PgSessionRepo {
             .await
             .map_err(map_sqlx_error)?;
 
-        Ok(row.map(Session::from))
+        Ok(row.map(Session::try_from).transpose()?)
     }
 }
