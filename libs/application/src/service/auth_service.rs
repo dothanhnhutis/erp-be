@@ -15,30 +15,34 @@ use domain::{
         session::{DeviceType, NewSession, Session},
         user::{self, User, UserStatus},
     },
-    repositories::{SessionRepo, UserRepo},
+    repositories::{RoleRepository, SessionRepo, UserRepo},
 };
 
-pub struct AuthService<UR, USR>
+pub struct AuthService<UR, USR, RR>
 where
     UR: UserRepo,
     USR: SessionRepo,
+    RR: RoleRepository,
 {
     user_repo: UR,
     session_repo: USR,
+    role_repo: RR,
     jwt_enc: EncodingKey,
     access_token_ttl: Duration,
     refresh_token_ttl: Duration,
     max_refresh_token_ttl: Duration,
 }
 
-impl<UR, USR> AuthService<UR, USR>
+impl<UR, USR, RR> AuthService<UR, USR, RR>
 where
     UR: UserRepo,
     USR: SessionRepo,
+    RR: RoleRepository,
 {
     pub fn new(
         user_repo: UR,
         session_repo: USR,
+        role_repo: RR,
         jwt_enc: EncodingKey,
         access_token_ttl: Duration,
         refresh_token_ttl: Duration,
@@ -47,6 +51,7 @@ where
         Self {
             user_repo,
             session_repo,
+            role_repo,
             jwt_enc,
             access_token_ttl,
             refresh_token_ttl,
@@ -135,7 +140,10 @@ where
         })
     }
 
-    pub async fn authentication(&self, claims: &Claims) -> Result<(Session, User), AppError> {
+    pub async fn authentication(
+        &self,
+        claims: &Claims,
+    ) -> Result<(Session, User, Vec<String>), AppError> {
         let (session, user) = tokio::try_join!(
             async {
                 self.session_repo
@@ -151,6 +159,11 @@ where
             },
         )?;
 
+        let permission_codes = self
+            .role_repo
+            .find_permission_codes_for_user(user.id)
+            .await?;
+
         let now = chrono::Utc::now();
 
         // let cached_session = CachedSession {
@@ -161,6 +174,6 @@ where
 
         // self.session_repo.find_by_token_hash(token_hash)
 
-        Ok((session, user))
+        Ok((session, user, permission_codes))
     }
 }

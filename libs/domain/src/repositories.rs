@@ -71,3 +71,12 @@ pub trait SessionRepo: Send + Sync {
         id: uuid::Uuid,
     ) -> impl Future<Output = Result<Option<Session>, RepositoryError>> + Send;
 }
+
+pub trait RoleRepository: Send + Sync {
+    /// Mã permission của một user (JOIN user_roles→role_permissions→permissions),
+    /// chỉ tính role đang ACTIVE và chưa xoá mềm.
+    fn find_permission_codes_for_user(
+        &self,
+        user_id: uuid::Uuid,
+    ) -> impl Future<Output = Result<Vec<String>, RepositoryError>> + Send;
+}
