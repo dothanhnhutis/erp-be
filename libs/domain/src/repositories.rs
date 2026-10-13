@@ -65,4 +65,9 @@ pub trait SessionRepo: Send + Sync {
         &self,
         token_hash: &str,
     ) -> impl Future<Output = Result<Option<Session>, RepositoryError>> + Send;
+
+    fn find_by_id(
+        &self,
+        id: uuid::Uuid,
+    ) -> impl Future<Output = Result<Option<Session>, RepositoryError>> + Send;
 }

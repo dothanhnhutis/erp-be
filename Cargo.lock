@@ -1350,6 +1350,7 @@ dependencies = [
  "domain",
  "dotenvy",
  "redis",
+ "serde_json",
  "sqlx",
  "tokio",
  "uuid",

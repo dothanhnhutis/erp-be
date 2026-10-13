@@ -70,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
     let shared_state = AppState::new(config.clone()).await;
 
     let app = Router::new()
-        .nest("/api", create_router())
+        .nest("/api", create_router(shared_state.clone()))
         .layer(cors)
         .with_http_tracing()
         .with_state(shared_state);

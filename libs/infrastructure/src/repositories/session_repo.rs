@@ -91,6 +91,17 @@ const SELECT_SESSION_BY_TOKEN: &str = r#"
     WHERE refresh_token_hash = $1 OR previous_token_hash = $1
 "#;
 
+const SELECT_SESSION_BY_ID: &str = r#"
+    SELECT
+        id, user_id, refresh_token_hash, previous_token_hash, rotated_at,
+        device_name, device_type, app_version, user_agent,
+        ip_address::text AS ip_address,
+        revoked_at, revoke_reason, expires_at, absolute_expires_at,
+        created_at, updated_at
+    FROM user_sessions
+    WHERE id = $1
+"#;
+
 impl SessionRepo for PgSessionRepo {
     async fn create(&self, new_session: NewSession) -> Result<Session, RepositoryError> {
         let row: SessionRow = sqlx::query_as(INSERT_SESSION)
@@ -117,6 +128,16 @@ impl SessionRepo for PgSessionRepo {
     ) -> Result<Option<Session>, RepositoryError> {
         let row: Option<SessionRow> = sqlx::query_as(SELECT_SESSION_BY_TOKEN)
             .bind(token_hash)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_error)?;
+
+        Ok(row.map(Session::try_from).transpose()?)
+    }
+
+    async fn find_by_id(&self, id: uuid::Uuid) -> Result<Option<Session>, RepositoryError> {
+        let row: Option<SessionRow> = sqlx::query_as(SELECT_SESSION_BY_ID)
+            .bind(id)
             .fetch_optional(&self.pool)
             .await
             .map_err(map_sqlx_error)?;

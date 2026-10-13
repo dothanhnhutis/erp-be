@@ -13,7 +13,10 @@ pub async fn require_auth(
     mut req: Request,
     next: Next,
 ) -> Result<Response, ApiError> {
-    // let (session, user, permission_codes) = state.auth_service.authenticate(&token).await?;
+    let (session, user) = state.auth_service.authentication(&jwt).await?;
+
+    println!("{:#?}", session);
+    println!("{:#?}", user);
 
     // req.extensions_mut().insert(AuthContext {
     //     session,

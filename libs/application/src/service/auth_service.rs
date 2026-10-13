@@ -9,9 +9,11 @@ use crate::{
 };
 use argon2::PasswordVerifier;
 use domain::{
+    cache::SessionCache,
     entities::{
-        session::{DeviceType, NewSession},
-        user::UserStatus,
+        cached_session::CachedSession,
+        session::{DeviceType, NewSession, Session},
+        user::{self, User, UserStatus},
     },
     repositories::{SessionRepo, UserRepo},
 };
@@ -133,9 +135,32 @@ where
         })
     }
 
-    pub async fn authentication(&self, claims: Claims) -> Result<LoginResponse, AppError> {
+    pub async fn authentication(&self, claims: &Claims) -> Result<(Session, User), AppError> {
+        let (session, user) = tokio::try_join!(
+            async {
+                self.session_repo
+                    .find_by_id(claims.sid)
+                    .await?
+                    .ok_or(AppError::Unauthorized("Thiếu thông tin xác thực".into()))
+            },
+            async {
+                self.user_repo
+                    .find_by_id(claims.sub)
+                    .await?
+                    .ok_or(AppError::Unauthorized("Thiếu thông tin xác thực".into()))
+            },
+        )?;
 
-        
+        let now = chrono::Utc::now();
 
-        self.session_repo.find_by_token_hash(token_hash)
+        // let cached_session = CachedSession {
+        //     session,
+        //     user,
+        //     db_synced_at: now,
+        // };
+
+        // self.session_repo.find_by_token_hash(token_hash)
+
+        Ok((session, user))
+    }
 }

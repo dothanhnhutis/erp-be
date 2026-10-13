@@ -6,7 +6,7 @@ use redis::{AsyncCommands, aio::ConnectionManager};
 use uuid::Uuid;
 
 use crate::{
-    cache::{session_key, user_key},
+    cache::connect::{session_key, user_key},
     persistence::error::{map_json, map_redis},
 };
 
