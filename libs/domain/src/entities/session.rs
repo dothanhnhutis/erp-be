@@ -62,7 +62,7 @@ pub struct NewSession {
     pub refresh_token_hash: String,
     pub device_name: Option<String>,
     pub device_type: DeviceType,
-    pub app_version: Option<String>,
+    pub app_version: String,
     pub user_agent: Option<String>,
     pub ip_address: Option<String>,
     pub expires_at: DateTime<Utc>,

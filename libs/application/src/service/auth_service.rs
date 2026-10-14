@@ -144,7 +144,7 @@ where
         &self,
         claims: &Claims,
     ) -> Result<(Session, User, Vec<String>), AppError> {
-        let (session, user) = tokio::try_join!(
+        let (session, user, permission_codes) = tokio::try_join!(
             async {
                 self.session_repo
                     .find_by_id(claims.sid)
@@ -157,14 +157,31 @@ where
                     .await?
                     .ok_or(AppError::Unauthorized("Thiếu thông tin xác thực".into()))
             },
+            async {
+                self.role_repo
+                    .find_permission_codes_for_user(claims.sub)
+                    .await
+                    .map_err(AppError::from)
+            },
         )?;
-
-        let permission_codes = self
-            .role_repo
-            .find_permission_codes_for_user(user.id)
-            .await?;
-
         let now = chrono::Utc::now();
+
+        if session.revoked_at.is_some() {
+            // let _ = self.cache.remove(&token_hash).await;
+            return Err(AppError::Unauthorized(
+                "Phiên đăng nhập đã bị thu hồi".into(),
+            ));
+        }
+        if session.expires_at <= now {
+            // let _ = self.cache.remove(&token_hash).await;
+            // vô hiệu hoá session db luôn  (revoke_reason 'EXPIRED')
+            return Err(AppError::Unauthorized("Phiên đăng nhập đã hết hạn".into()));
+        }
+        if user.status == UserStatus::Deactivated {
+            // let _ = self.cache.remove(&token_hash).await;
+            // vô hiệu hoá session db luôn  (revoke_reason 'EXPIRED')
+            return Err(AppError::Unauthorized("Tài khoản đã bị vô hiệu hóa".into()));
+        }
 
         // let cached_session = CachedSession {
         //     session,
