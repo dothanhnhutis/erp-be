@@ -18,22 +18,24 @@ pub enum CacheError {
 
 /// Port cache phiên (outbound). Adapter (vd Redis) hiện thực ở tầng infrastructure.
 pub trait SessionCache: Send + Sync {
-    fn get(
-        &self,
-        token_hash: &str,
-    ) -> impl Future<Output = Result<Option<CachedSession>, CacheError>> + Send;
+    // fn get(
+    //     &self,
+    //     token_hash: &str,
+    // ) -> impl Future<Output = Result<Option<CachedSession>, CacheError>> + Send;
 
-    fn put(
-        &self,
-        token_hash: &str,
-        entry: &CachedSession,
-        ttl_secs: i64,
-    ) -> impl Future<Output = Result<(), CacheError>> + Send;
+    // fn put(
+    //     &self,
+    //     token_hash: &str,
+    //     entry: &CachedSession,
+    //     ttl_secs: i64,
+    // ) -> impl Future<Output = Result<(), CacheError>> + Send;
 
-    fn remove(&self, token_hash: &str) -> impl Future<Output = Result<(), CacheError>> + Send;
+    // fn remove(&self, token_hash: &str) -> impl Future<Output = Result<(), CacheError>> + Send;
 
-    fn remove_all_for_user(
-        &self,
-        user_id: Uuid,
-    ) -> impl Future<Output = Result<(), CacheError>> + Send;
+    // fn remove_all_for_user(
+    //     &self,
+    //     user_id: Uuid,
+    // ) -> impl Future<Output = Result<(), CacheError>> + Send;
+
+    fn is_revoked(&self, id: uuid::Uuid) -> impl Future<Output = Result<bool, CacheError>> + Send;
 }

@@ -18,31 +18,35 @@ use domain::{
     repositories::{RoleRepository, SessionRepo, UserRepo},
 };
 
-pub struct AuthService<UR, USR, RR>
+pub struct AuthService<UR, USR, RR, SC>
 where
     UR: UserRepo,
     USR: SessionRepo,
     RR: RoleRepository,
+    SC: SessionCache,
 {
     user_repo: UR,
     session_repo: USR,
     role_repo: RR,
+    session_cache: SC,
     jwt_enc: EncodingKey,
     access_token_ttl: Duration,
     refresh_token_ttl: Duration,
     max_refresh_token_ttl: Duration,
 }
 
-impl<UR, USR, RR> AuthService<UR, USR, RR>
+impl<UR, USR, RR, SC> AuthService<UR, USR, RR, SC>
 where
     UR: UserRepo,
     USR: SessionRepo,
     RR: RoleRepository,
+    SC: SessionCache,
 {
     pub fn new(
         user_repo: UR,
         session_repo: USR,
         role_repo: RR,
+        session_cache: SC,
         jwt_enc: EncodingKey,
         access_token_ttl: Duration,
         refresh_token_ttl: Duration,
@@ -52,6 +56,7 @@ where
             user_repo,
             session_repo,
             role_repo,
+            session_cache,
             jwt_enc,
             access_token_ttl,
             refresh_token_ttl,
@@ -144,6 +149,21 @@ where
         &self,
         claims: &Claims,
     ) -> Result<(Session, User, Vec<String>), AppError> {
+        let is_revoked = self
+            .session_cache
+            .is_revoked(claims.sid)
+            .await
+            .map_err(|e| {
+                tracing::warn!("cache sismember lỗi: {e}");
+                AppError::Unauthorized("Phiên đăng nhập đã bị thu hồi".into())
+            })?;
+
+        if !is_revoked {
+            return Err(AppError::Unauthorized(
+                "Phiên đăng nhập đã bị thu hồi".into(),
+            ));
+        }
+
         let (session, user, permission_codes) = tokio::try_join!(
             async {
                 self.session_repo
@@ -174,12 +194,12 @@ where
         }
         if session.expires_at <= now {
             // let _ = self.cache.remove(&token_hash).await;
-            // vô hiệu hoá session db luôn  (revoke_reason 'EXPIRED')
+            // TODO:  vô hiệu hoá session db luôn  (revoke_reason 'EXPIRED')
             return Err(AppError::Unauthorized("Phiên đăng nhập đã hết hạn".into()));
         }
         if user.status == UserStatus::Deactivated {
             // let _ = self.cache.remove(&token_hash).await;
-            // vô hiệu hoá session db luôn  (revoke_reason 'EXPIRED')
+            // TODO: vô hiệu hoá session db luôn  (revoke_reason 'EXPIRED')
             return Err(AppError::Unauthorized("Tài khoản đã bị vô hiệu hóa".into()));
         }
 
