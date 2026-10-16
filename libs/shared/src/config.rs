@@ -1,3 +1,4 @@
+use chrono::Duration;
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use std::{env, num::ParseIntError};
 use thiserror::Error;
@@ -155,5 +156,23 @@ impl AppConfig {
             log_filter: required("LOG_FILTER")?,
             log_max_file,
         })
+    }
+}
+
+pub struct TokenConfig {
+    pub jwt_enc: EncodingKey,
+    pub access_ttl: Duration,
+    pub refresh_ttl: Duration,
+    pub max_refresh_ttl: Duration,
+}
+
+impl From<&AppConfig> for TokenConfig {
+    fn from(value: &AppConfig) -> Self {
+        Self {
+            jwt_enc: value.jwt_enc.clone(),
+            access_ttl: Duration::seconds(value.access_token_ttl_secs),
+            refresh_ttl: Duration::seconds(value.refresh_token_ttl_secs),
+            max_refresh_ttl: Duration::seconds(value.max_refresh_token_ttl_secs),
+        }
     }
 }

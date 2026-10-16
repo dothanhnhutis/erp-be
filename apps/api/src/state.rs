@@ -1,19 +1,20 @@
-use chrono::Duration;
 use std::sync::Arc;
 
 use application::service::auth_service::{self, AuthService};
 use axum::extract::FromRef;
 use infrastructure::{
+    cache::{connect::init_redis, session::RedisSessionCache},
     postgres::pool::init_db_pool,
     repositories::{
         role_repo::PgRoleRepository, session_repo::PgSessionRepo, user_repo::PgUserRepo,
     },
 };
-use shared::config::AppConfig;
+use shared::config::{AppConfig, TokenConfig};
 
 #[derive(Clone, FromRef)]
 pub struct AppState {
-    pub auth_service: Arc<AuthService<PgUserRepo, PgSessionRepo, PgRoleRepository>>,
+    pub auth_service:
+        Arc<AuthService<PgUserRepo, PgSessionRepo, PgRoleRepository, RedisSessionCache>>,
     pub config: Arc<AppConfig>,
 }
 
@@ -23,18 +24,23 @@ impl AppState {
             .await
             .expect("không kết nối được database");
 
+        let redis_conn = init_redis(&config.redis_url)
+            .await
+            .expect("Failed to connect to Redis");
+
         let pg_user_repo = PgUserRepo::new(pool.clone());
         let pg_session_repo = PgSessionRepo::new(pool.clone());
         let pg_role_repo = PgRoleRepository::new(pool.clone());
 
+        let cache = RedisSessionCache::new(redis_conn);
+
+        let token = TokenConfig::from(&config);
         let auth_service = Arc::new(auth_service::AuthService::new(
             pg_user_repo.clone(),
             pg_session_repo.clone(),
             pg_role_repo.clone(),
-            config.jwt_enc.clone(),
-            Duration::seconds(config.access_token_ttl_secs),
-            Duration::seconds(config.refresh_token_ttl_secs),
-            Duration::seconds(config.max_refresh_token_ttl_secs),
+            cache,
+            token,
         ));
 
         Self {

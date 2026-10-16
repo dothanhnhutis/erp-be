@@ -1,5 +1,6 @@
 use chrono::Duration;
 use jsonwebtoken::EncodingKey;
+use shared::config::TokenConfig;
 use std::str::FromStr;
 
 use crate::{
@@ -29,10 +30,7 @@ where
     session_repo: USR,
     role_repo: RR,
     session_cache: SC,
-    jwt_enc: EncodingKey,
-    access_token_ttl: Duration,
-    refresh_token_ttl: Duration,
-    max_refresh_token_ttl: Duration,
+    token: TokenConfig,
 }
 
 impl<UR, USR, RR, SC> AuthService<UR, USR, RR, SC>
@@ -47,20 +45,14 @@ where
         session_repo: USR,
         role_repo: RR,
         session_cache: SC,
-        jwt_enc: EncodingKey,
-        access_token_ttl: Duration,
-        refresh_token_ttl: Duration,
-        max_refresh_token_ttl: Duration,
+        token: TokenConfig,
     ) -> Self {
         Self {
             user_repo,
             session_repo,
             role_repo,
             session_cache,
-            jwt_enc,
-            access_token_ttl,
-            refresh_token_ttl,
-            max_refresh_token_ttl,
+            token,
         }
     }
 
@@ -110,9 +102,9 @@ where
 
         let token = new_refresh();
         let now = chrono::Utc::now();
-        let access_token_ttl = now + self.access_token_ttl;
-        let expires_at = now + self.refresh_token_ttl;
-        let absolute_expires_at = now + self.max_refresh_token_ttl;
+        let access_token_ttl = now + self.token.access_ttl;
+        let expires_at = now + self.token.refresh_ttl;
+        let absolute_expires_at = now + self.token.max_refresh_ttl;
 
         let new_session = NewSession {
             user_id: user.id,
@@ -135,7 +127,7 @@ where
             exp: access_token_ttl.timestamp(),
         };
 
-        let access_token = issue_access(&self.jwt_enc, claims)?;
+        let access_token = issue_access(&self.token.jwt_enc, claims)?;
 
         Ok(LoginResponse {
             access_token,
@@ -158,32 +150,70 @@ where
                 AppError::Unauthorized("Phiên đăng nhập đã bị thu hồi".into())
             })?;
 
-        if !is_revoked {
+        if is_revoked {
             return Err(AppError::Unauthorized(
                 "Phiên đăng nhập đã bị thu hồi".into(),
             ));
         }
 
-        let (session, user, permission_codes) = tokio::try_join!(
-            async {
-                self.session_repo
-                    .find_by_id(claims.sid)
-                    .await?
-                    .ok_or(AppError::Unauthorized("Thiếu thông tin xác thực".into()))
-            },
-            async {
-                self.user_repo
-                    .find_by_id(claims.sub)
-                    .await?
-                    .ok_or(AppError::Unauthorized("Thiếu thông tin xác thực".into()))
-            },
-            async {
-                self.role_repo
-                    .find_permission_codes_for_user(claims.sub)
-                    .await
-                    .map_err(AppError::from)
-            },
-        )?;
+        // 1. Cache trước; lỗi cache → coi như miss (fail-open), fallback DB.
+        let cached = match self
+            .session_cache
+            .get(
+                claims.sub.to_string().as_ref(),
+                claims.sid.to_string().as_ref(),
+            )
+            .await
+        {
+            Ok(hit) => hit,
+            Err(e) => {
+                tracing::warn!("cache get lỗi, fallback DB: {e}");
+                None
+            }
+        };
+
+        let (session, user, db_synced_at) = match cached {
+            Some(c) => (c.session, c.user, c.db_synced_at),
+            None => {
+                let (session, user) = tokio::try_join!(
+                    async {
+                        self.session_repo
+                            .find_by_id(claims.sid)
+                            .await?
+                            .ok_or(AppError::Unauthorized("Thiếu thông tin xác thực".into()))
+                    },
+                    async {
+                        self.user_repo
+                            .find_by_id(claims.sub)
+                            .await?
+                            .ok_or(AppError::Unauthorized("Thiếu thông tin xác thực".into()))
+                    }
+                )?;
+                (session, user, session.updated_at)
+            }
+        };
+
+        // let (session, user, permission_codes) = tokio::try_join!(
+        //     async {
+        //         self.session_repo
+        //             .find_by_id(claims.sid)
+        //             .await?
+        //             .ok_or(AppError::Unauthorized("Thiếu thông tin xác thực".into()))
+        //     },
+        //     async {
+        //         self.user_repo
+        //             .find_by_id(claims.sub)
+        //             .await?
+        //             .ok_or(AppError::Unauthorized("Thiếu thông tin xác thực".into()))
+        //     },
+        //     async {
+        //         self.role_repo
+        //             .find_permission_codes_for_user(claims.sub)
+        //             .await
+        //             .map_err(AppError::from)
+        //     },
+        // )?;
+
         let now = chrono::Utc::now();
 
         if session.revoked_at.is_some() {

@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use crate::entities::cached_session::CachedSession;
+use crate::entities::{cached_session::CachedSession, session};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CacheError {
@@ -18,10 +18,11 @@ pub enum CacheError {
 
 /// Port cache phiên (outbound). Adapter (vd Redis) hiện thực ở tầng infrastructure.
 pub trait SessionCache: Send + Sync {
-    // fn get(
-    //     &self,
-    //     token_hash: &str,
-    // ) -> impl Future<Output = Result<Option<CachedSession>, CacheError>> + Send;
+    fn get(
+        &self,
+        user_id: &str,
+        session_id: &str,
+    ) -> impl Future<Output = Result<Option<CachedSession>, CacheError>> + Send;
 
     // fn put(
     //     &self,

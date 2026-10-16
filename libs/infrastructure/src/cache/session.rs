@@ -3,7 +3,6 @@ use domain::{
     entities::cached_session::CachedSession,
 };
 use redis::{AsyncCommands, aio::ConnectionManager};
-use uuid::Uuid;
 
 use crate::{
     cache::connect::{session_key, session_revoked_key, user_key},
@@ -22,14 +21,21 @@ impl RedisSessionCache {
 }
 
 impl SessionCache for RedisSessionCache {
-    // async fn get(&self, token_hash: &str) -> Result<Option<CachedSession>, CacheError> {
-    //     let mut conn: ConnectionManager = self.conn.clone();
-    //     let raw: Option<String> = conn.get(session_key(token_hash)).await.map_err(map_redis)?;
-    //     match raw {
-    //         Some(s) => Ok(Some(serde_json::from_str(&s).map_err(map_json)?)),
-    //         None => Ok(None),
-    //     }
-    // }
+    async fn get(
+        &self,
+        user_id: &str,
+        session_id: &str,
+    ) -> Result<Option<CachedSession>, CacheError> {
+        let mut conn: ConnectionManager = self.conn.clone();
+        let raw: Option<String> = conn
+            .get(session_key(user_id, session_id))
+            .await
+            .map_err(map_redis)?;
+        match raw {
+            Some(s) => Ok(Some(serde_json::from_str(&s).map_err(map_json)?)),
+            None => Ok(None),
+        }
+    }
 
     // async fn put(
     //     &self,
@@ -84,6 +90,8 @@ impl SessionCache for RedisSessionCache {
             .sismember(session_revoked_key(), id.to_string())
             .await
             .map_err(map_redis)?;
+
+        println!("is_revoked: {}", raw);
         Ok(raw)
     }
 }
