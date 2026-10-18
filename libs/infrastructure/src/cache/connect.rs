@@ -13,7 +13,3 @@ pub fn session_key(user_id: &str, sid: &str) -> String {
 pub fn user_key(user_id: uuid::Uuid) -> String {
     format!("user_sessions:{user_id}")
 }
-
-pub fn session_revoked_key() -> String {
-    format!("session_revoked_set")
-}

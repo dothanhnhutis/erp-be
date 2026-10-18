@@ -4,6 +4,7 @@ mod handlers;
 mod http;
 mod logger;
 mod middlewares;
+mod permissions;
 mod routes;
 mod state;
 

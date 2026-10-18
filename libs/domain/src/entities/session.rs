@@ -18,6 +18,7 @@ pub struct Session {
     pub ip_address: Option<String>,
     pub revoked_at: Option<DateTime<Utc>>,
     pub revoke_reason: Option<String>,
+    pub last_seen_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub absolute_expires_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,

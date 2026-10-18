@@ -5,6 +5,9 @@ use axum::response::Response;
 use crate::AppState;
 use crate::error::ApiError;
 use crate::extractors::jwt::Authentication;
+use crate::extractors::permission::Permissions;
+use crate::extractors::session::UserSession;
+use crate::extractors::user::Me;
 
 /// Middleware bắt buộc đăng nhập: lấy token từ Bearer/cookie, xác thực, gắn AuthContext.
 pub async fn require_auth(
@@ -13,17 +16,12 @@ pub async fn require_auth(
     mut req: Request,
     next: Next,
 ) -> Result<Response, ApiError> {
-    let (session, user, code) = state.auth_service.authentication(&jwt).await?;
+    let (session, user, codes) = state.auth_service.authentication(&jwt).await?;
 
-    println!("{:#?}", session);
-    println!("{:#?}", user);
-    println!("{:#?}", code);
-
-    // req.extensions_mut().insert(AuthContext {
-    //     session,
-    //     user,
-    //     permission_codes,
-    // });
+    let ext = req.extensions_mut();
+    ext.insert(Me(user));
+    ext.insert(UserSession(session));
+    ext.insert(Permissions(codes));
 
     Ok(next.run(req).await)
 }

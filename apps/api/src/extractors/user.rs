@@ -1,13 +1,16 @@
+use application::errors::AppError;
 use axum::{
     extract::{FromRef, FromRequestParts},
     http::request,
 };
+use domain::entities::user::User;
 
 use crate::{error::ApiError, state::AppState};
 
-pub struct CurrentUser {}
+#[derive(Debug, Clone)]
+pub struct Me(pub User);
 
-impl<S> FromRequestParts<S> for CurrentUser
+impl<S> FromRequestParts<S> for Me
 where
     S: Clone + Send + Sync + 'static,
     AppState: FromRef<S>,
@@ -15,12 +18,10 @@ where
     type Rejection = ApiError;
     async fn from_request_parts(
         parts: &mut request::Parts,
-        state: &S,
+        _: &S,
     ) -> Result<Self, Self::Rejection> {
-        let app_state = AppState::from_ref(state);
-
-        // let (session, user, permission_codes) = app_state.auth_service.authenticate(&token).await?;
-
-        Ok(CurrentUser {})
+        parts.extensions.get::<Me>().cloned().ok_or_else(|| {
+            ApiError::Domain(AppError::Unauthorized("Thiếu thông tin xác thực".into()))
+        })
     }
 }

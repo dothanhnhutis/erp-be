@@ -39,6 +39,10 @@ pub struct AppConfig {
     pub refresh_token_name: String,
     pub refresh_token_ttl_secs: i64,
     pub max_refresh_token_ttl_secs: i64,
+    /// TTL của bản cache phiên trong Redis (giây). Ngắn hơn session TTL để giới hạn staleness.
+    pub session_cache_ttl_secs: i64,
+    /// Khoảng tối thiểu giữa 2 lần ghi `expires_at` xuống DB (giây) — throttle.
+    pub session_db_sync_secs: i64,
     pub jwt_enc: EncodingKey,
     pub jwt_dec: DecodingKey,
     pub redis_url: String,
@@ -123,6 +127,24 @@ impl AppConfig {
                     source,
                 })?;
 
+        let session_cache_ttl_secs_raw = required("SESSION_CACHE_TTL_SECS")?;
+        let session_cache_ttl_secs =
+            session_cache_ttl_secs_raw
+                .parse::<i64>()
+                .map_err(|source| ConfigError::InvalidNumber {
+                    key: "SESSION_CACHE_TTL_SECS",
+                    value: session_cache_ttl_secs_raw.clone(),
+                    source,
+                })?;
+        let session_db_sync_secs_raw = required("SESSION_DB_SYNC_SECS")?;
+        let session_db_sync_secs = session_db_sync_secs_raw.parse::<i64>().map_err(|source| {
+            ConfigError::InvalidNumber {
+                key: "SESSION_DB_SYNC_SECS",
+                value: session_db_sync_secs_raw.clone(),
+                source,
+            }
+        })?;
+
         let jwt_secret = required("JWT_SECRET")?;
 
         let log_max_file_raw = optional("LOG_MAX_FILE", "7")?;
@@ -148,6 +170,8 @@ impl AppConfig {
             refresh_token_name: required("REFRESH_TOKEN_NAME")?,
             refresh_token_ttl_secs,
             max_refresh_token_ttl_secs,
+            session_cache_ttl_secs,
+            session_db_sync_secs,
             jwt_enc: EncodingKey::from_secret(jwt_secret.as_bytes()),
             jwt_dec: DecodingKey::from_secret(jwt_secret.as_bytes()),
             database_url: required("DATABASE_URL")?,
@@ -164,6 +188,8 @@ pub struct TokenConfig {
     pub access_ttl: Duration,
     pub refresh_ttl: Duration,
     pub max_refresh_ttl: Duration,
+    pub session_cache_ttl: Duration,
+    pub session_db_sync: Duration,
 }
 
 impl From<&AppConfig> for TokenConfig {
@@ -173,6 +199,8 @@ impl From<&AppConfig> for TokenConfig {
             access_ttl: Duration::seconds(value.access_token_ttl_secs),
             refresh_ttl: Duration::seconds(value.refresh_token_ttl_secs),
             max_refresh_ttl: Duration::seconds(value.max_refresh_token_ttl_secs),
+            session_cache_ttl: Duration::seconds(value.session_cache_ttl_secs),
+            session_db_sync: Duration::seconds(value.session_db_sync_secs),
         }
     }
 }

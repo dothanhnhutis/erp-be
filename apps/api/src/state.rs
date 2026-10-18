@@ -3,7 +3,7 @@ use std::sync::Arc;
 use application::service::auth_service::{self, AuthService};
 use axum::extract::FromRef;
 use infrastructure::{
-    cache::{connect::init_redis, session::RedisSessionCache},
+    cache::{connect::init_redis, permission::RedisPermissionCache, session::RedisSessionCache},
     postgres::pool::init_db_pool,
     repositories::{
         role_repo::PgRoleRepository, session_repo::PgSessionRepo, user_repo::PgUserRepo,
@@ -13,8 +13,15 @@ use shared::config::{AppConfig, TokenConfig};
 
 #[derive(Clone, FromRef)]
 pub struct AppState {
-    pub auth_service:
-        Arc<AuthService<PgUserRepo, PgSessionRepo, PgRoleRepository, RedisSessionCache>>,
+    pub auth_service: Arc<
+        AuthService<
+            PgUserRepo,
+            PgSessionRepo,
+            PgRoleRepository,
+            RedisSessionCache,
+            RedisPermissionCache,
+        >,
+    >,
     pub config: Arc<AppConfig>,
 }
 
@@ -32,14 +39,16 @@ impl AppState {
         let pg_session_repo = PgSessionRepo::new(pool.clone());
         let pg_role_repo = PgRoleRepository::new(pool.clone());
 
-        let cache = RedisSessionCache::new(redis_conn);
+        let session_cache = RedisSessionCache::new(redis_conn.clone());
+        let per_cache = RedisPermissionCache::new(redis_conn.clone());
 
         let token = TokenConfig::from(&config);
         let auth_service = Arc::new(auth_service::AuthService::new(
             pg_user_repo.clone(),
             pg_session_repo.clone(),
             pg_role_repo.clone(),
-            cache,
+            session_cache,
+            per_cache,
             token,
         ));
 

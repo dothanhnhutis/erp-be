@@ -23,6 +23,7 @@ use crate::{
     },
     errors::DomainError,
 };
+use chrono::{DateTime, Utc};
 use uuid;
 
 #[derive(Debug, thiserror::Error)]
@@ -70,6 +71,12 @@ pub trait SessionRepo: Send + Sync {
         &self,
         id: uuid::Uuid,
     ) -> impl Future<Output = Result<Option<Session>, RepositoryError>> + Send;
+
+    fn touch_expires(
+        &self,
+        id: uuid::Uuid,
+        expires_at: DateTime<Utc>,
+    ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
 }
 
 pub trait RoleRepository: Send + Sync {

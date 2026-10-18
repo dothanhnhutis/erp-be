@@ -38,6 +38,7 @@ struct SessionRow {
     ip_address: Option<String>,
     revoked_at: Option<DateTime<Utc>>,
     revoke_reason: Option<String>,
+    last_seen_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
     absolute_expires_at: DateTime<Utc>,
     created_at: DateTime<Utc>,
@@ -61,6 +62,7 @@ impl TryFrom<SessionRow> for Session {
             ip_address: row.ip_address,
             revoked_at: row.revoked_at,
             revoke_reason: row.revoke_reason,
+            last_seen_at: row.last_seen_at,
             expires_at: row.expires_at,
             absolute_expires_at: row.absolute_expires_at,
             created_at: row.created_at,
@@ -77,7 +79,7 @@ const INSERT_SESSION: &str = r#"
     RETURNING
         id, user_id, refresh_token_hash, previous_token_hash, rotated_at, device_name, device_type,
         app_version, user_agent, ip_address::text AS ip_address,
-        revoked_at, revoke_reason, expires_at, absolute_expires_at, created_at, updated_at
+        revoked_at, revoke_reason, last_seen_at, expires_at, absolute_expires_at, created_at, updated_at
 "#;
 
 const SELECT_SESSION_BY_TOKEN: &str = r#"
@@ -85,7 +87,7 @@ const SELECT_SESSION_BY_TOKEN: &str = r#"
         id, user_id, refresh_token_hash, previous_token_hash, rotated_at,
         device_name, device_type, app_version, user_agent,
         ip_address::text AS ip_address,
-        revoked_at, revoke_reason, expires_at, absolute_expires_at,
+        revoked_at, revoke_reason, last_seen_at, expires_at, absolute_expires_at,
         created_at, updated_at
     FROM user_sessions
     WHERE refresh_token_hash = $1 OR previous_token_hash = $1
@@ -96,10 +98,16 @@ const SELECT_SESSION_BY_ID: &str = r#"
         id, user_id, refresh_token_hash, previous_token_hash, rotated_at,
         device_name, device_type, app_version, user_agent,
         ip_address::text AS ip_address,
-        revoked_at, revoke_reason, expires_at, absolute_expires_at,
+        revoked_at, revoke_reason, last_seen_at, expires_at, absolute_expires_at,
         created_at, updated_at
     FROM user_sessions
     WHERE id = $1
+"#;
+
+const TOUCH_EXPIRES: &str = r#"
+    UPDATE user_sessions
+    SET expires_at = $2, updated_at = NOW()
+    WHERE id = $1 AND revoked_at IS NULL
 "#;
 
 impl SessionRepo for PgSessionRepo {
@@ -143,5 +151,20 @@ impl SessionRepo for PgSessionRepo {
             .map_err(map_sqlx_error)?;
 
         Ok(row.map(Session::try_from).transpose()?)
+    }
+
+    async fn touch_expires(
+        &self,
+        id: uuid::Uuid,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query(TOUCH_EXPIRES)
+            .bind(id)
+            .bind(expires_at)
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_error)?;
+
+        Ok(())
     }
 }

@@ -5,7 +5,7 @@ use domain::{
 use redis::{AsyncCommands, aio::ConnectionManager};
 
 use crate::{
-    cache::connect::{session_key, session_revoked_key, user_key},
+    cache::connect::session_key,
     persistence::error::{map_json, map_redis},
 };
 
@@ -37,31 +37,32 @@ impl SessionCache for RedisSessionCache {
         }
     }
 
-    // async fn put(
-    //     &self,
-    //     token_hash: &str,
-    //     entry: &CachedSession,
-    //     ttl_secs: i64,
-    // ) -> Result<(), CacheError> {
-    //     let mut conn = self.conn.clone();
-    //     let json = serde_json::to_string(entry).map_err(map_json)?;
-    //     let skey = session_key(token_hash);
-    //     let ukey = user_key(entry.session.user_id);
-    //     let ttl = ttl_secs.max(1); // SET EX 0 / EXPIRE 0 là footgun
+    async fn put(
+        &self,
+        user_id: &str,
+        session_id: &str,
+        entry: &CachedSession,
+        ttl_secs: i64,
+    ) -> Result<(), CacheError> {
+        let mut conn = self.conn.clone();
+        let json = serde_json::to_string(entry).map_err(map_json)?;
+        let skey = session_key(user_id, session_id);
+        // let ukey = user_key(entry.session.user_id);
+        let ttl = ttl_secs.max(1); // SET EX 0 / EXPIRE 0 là footgun
 
-    //     redis::pipe()
-    //         .atomic()
-    //         .set_ex(&skey, json, ttl as u64)
-    //         .ignore()
-    //         .sadd(&ukey, token_hash)
-    //         .ignore()
-    //         .expire(&ukey, ttl)
-    //         .ignore()
-    //         .query_async::<()>(&mut conn)
-    //         .await
-    //         .map_err(map_redis)?;
-    //     Ok(())
-    // }
+        redis::pipe()
+            .atomic()
+            .set_ex(&skey, json, ttl as u64)
+            .ignore()
+            // .sadd(&ukey, token_hash)
+            // .ignore()
+            // .expire(&ukey, ttl)
+            // .ignore()
+            .query_async::<()>(&mut conn)
+            .await
+            .map_err(map_redis)?;
+        Ok(())
+    }
 
     // async fn remove(&self, token_hash: &str) -> Result<(), CacheError> {
     //     let mut conn = self.conn.clone();
@@ -84,14 +85,14 @@ impl SessionCache for RedisSessionCache {
     //     Ok(())
     // }
 
-    async fn is_revoked(&self, id: uuid::Uuid) -> Result<bool, CacheError> {
-        let mut conn = self.conn.clone();
-        let raw: bool = conn
-            .sismember(session_revoked_key(), id.to_string())
-            .await
-            .map_err(map_redis)?;
+    // async fn is_revoked(&self, id: uuid::Uuid) -> Result<bool, CacheError> {
+    //     let mut conn = self.conn.clone();
+    //     let raw: bool = conn
+    //         .sismember(session_revoked_key(), id.to_string())
+    //         .await
+    //         .map_err(map_redis)?;
 
-        println!("is_revoked: {}", raw);
-        Ok(raw)
-    }
+    //     println!("is_revoked: {}", raw);
+    //     Ok(raw)
+    // }
 }

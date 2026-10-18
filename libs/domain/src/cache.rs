@@ -24,12 +24,13 @@ pub trait SessionCache: Send + Sync {
         session_id: &str,
     ) -> impl Future<Output = Result<Option<CachedSession>, CacheError>> + Send;
 
-    // fn put(
-    //     &self,
-    //     token_hash: &str,
-    //     entry: &CachedSession,
-    //     ttl_secs: i64,
-    // ) -> impl Future<Output = Result<(), CacheError>> + Send;
+    fn put(
+        &self,
+        user_id: &str,
+        session_id: &str,
+        entry: &CachedSession,
+        ttl_secs: i64,
+    ) -> impl Future<Output = Result<(), CacheError>> + Send;
 
     // fn remove(&self, token_hash: &str) -> impl Future<Output = Result<(), CacheError>> + Send;
 
@@ -38,5 +39,30 @@ pub trait SessionCache: Send + Sync {
     //     user_id: Uuid,
     // ) -> impl Future<Output = Result<(), CacheError>> + Send;
 
-    fn is_revoked(&self, id: uuid::Uuid) -> impl Future<Output = Result<bool, CacheError>> + Send;
+    // fn is_revoked(&self, id: uuid::Uuid) -> impl Future<Output = Result<bool, CacheError>> + Send;
+}
+
+/// Port cache permission theo user, có version toàn cục để invalidate hàng loạt.
+pub trait PermissionCache: Send + Sync {
+    /// Trả về (version hiện tại, codes nếu hit).
+    /// Caller phải giữ version này để `put`, không đọc lại version sau khi query DB.
+    fn get(
+        &self,
+        user_id: Uuid,
+    ) -> impl Future<Output = Result<(u64, Option<Vec<String>>), CacheError>> + Send;
+
+    fn put(
+        &self,
+        version: u64,
+        user_id: Uuid,
+        codes: &[String],
+        ttl_secs: u64,
+    ) -> impl Future<Output = Result<(), CacheError>> + Send;
+
+    /// Gán/gỡ role cho 1 user → chỉ xóa key của user đó.
+    fn invalidate_user(&self, user_id: Uuid)
+    -> impl Future<Output = Result<(), CacheError>> + Send;
+
+    /// Sửa role/permission → mọi key cũ bị bỏ, tự hết hạn theo TTL.
+    fn bump_version(&self) -> impl Future<Output = Result<(), CacheError>> + Send;
 }
