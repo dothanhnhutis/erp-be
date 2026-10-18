@@ -19,7 +19,7 @@ impl<S, P> FromRequestParts<S> for Require<P>
 where
     S: Clone + Send + Sync + 'static,
     AppState: FromRef<S>,
-    P: PermissionCode,
+    P: PermissionRule,
 {
     type Rejection = ApiError;
 
@@ -32,13 +32,57 @@ where
             ApiError::Domain(AppError::Unauthorized("Thiếu thông tin xác thực".into()))
         })?;
 
-        if codes.iter().any(|c| c == P::CODE) {
+        // if codes.iter().any(|c| c == P::CODE) {
+        //     Ok(Self(PhantomData))
+        // } else {
+        //     Err(ApiError::Domain(AppError::Forbidden(format!(
+        //         "Bạn không có quyền: {}",
+        //         P::CODE
+        //     ))))
+        // }
+
+        if P::allows(codes) {
             Ok(Self(PhantomData))
         } else {
             Err(ApiError::Domain(AppError::Forbidden(format!(
                 "Bạn không có quyền: {}",
-                P::CODE
+                P::describe()
             ))))
         }
+    }
+}
+
+pub trait PermissionRule {
+    fn allows(codes: &[String]) -> bool;
+    fn describe() -> String;
+}
+
+// Mọi PermissionCode đều là một rule đơn
+impl<P: PermissionCode> PermissionRule for P {
+    fn allows(codes: &[String]) -> bool {
+        codes.iter().any(|c| c == P::CODE)
+    }
+    fn describe() -> String {
+        P::CODE.to_string()
+    }
+}
+
+pub struct AnyOf<A, B>(PhantomData<fn() -> (A, B)>);
+impl<A: PermissionRule, B: PermissionRule> PermissionRule for AnyOf<A, B> {
+    fn allows(c: &[String]) -> bool {
+        A::allows(c) || B::allows(c)
+    }
+    fn describe() -> String {
+        format!("{} | {}", A::describe(), B::describe())
+    }
+}
+
+pub struct AllOf<A, B>(PhantomData<fn() -> (A, B)>);
+impl<A: PermissionRule, B: PermissionRule> PermissionRule for AllOf<A, B> {
+    fn allows(c: &[String]) -> bool {
+        A::allows(c) && B::allows(c)
+    }
+    fn describe() -> String {
+        format!("{} & {}", A::describe(), B::describe())
     }
 }
