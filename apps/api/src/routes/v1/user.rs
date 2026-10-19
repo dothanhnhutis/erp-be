@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use axum::{Router, extract::FromRef, routing::get};
-use shared::config::AppConfig;
 
 use crate::{handlers::user, state::AppState};
 

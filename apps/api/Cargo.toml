@@ -28,3 +28,4 @@ serde_json.workspace = true
 thiserror.workspace = true
 time.workspace = true
 chrono.workspace = true
+uuid.workspace = true

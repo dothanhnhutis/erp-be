@@ -7,7 +7,9 @@ where
     S: Clone + Send + Sync + 'static,
     AppState: FromRef<S>,
 {
-    Router::new().route("/login", post(auth::login_handler))
+    Router::new()
+        .route("/login", post(auth::login_handler))
+        .route("/refresh-token", post(auth::refresh_token_handler))
 }
 
 pub fn create_private_routes<S>() -> Router<S>

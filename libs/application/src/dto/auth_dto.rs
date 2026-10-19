@@ -1,4 +1,5 @@
-use chrono::{DateTime, SecondsFormat, SubsecRound, Utc};
+use chrono::{DateTime, SubsecRound, Utc};
+use domain::{entities::session::DeviceType, errors::DomainError};
 use serde::{Deserialize, Serialize, Serializer};
 use validator::{Validate, ValidationError};
 
@@ -24,6 +25,13 @@ pub struct LoginRequest {
     pub device_name: Option<String>,
     pub app_version: String,
 }
+
+impl LoginRequest {
+    pub fn device_type(&self) -> Result<DeviceType, DomainError> {
+        self.device_type.parse()
+    }
+}
+
 fn validate_password(password: &str) -> Result<(), ValidationError> {
     let mut has_uppercase = false;
     let mut has_lowercase = false;
@@ -73,6 +81,14 @@ where
 pub struct LoginResponse {
     pub access_token: String,
     pub refresh_token: String,
+    #[serde(serialize_with = "serialize_dt_to_3millis")]
+    pub access_token_expires_at: DateTime<Utc>,
+    #[serde(serialize_with = "serialize_dt_to_3millis")]
+    pub refresh_token_expires_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WebLoginResponse {
     #[serde(serialize_with = "serialize_dt_to_3millis")]
     pub access_token_expires_at: DateTime<Utc>,
     #[serde(serialize_with = "serialize_dt_to_3millis")]

@@ -1,8 +1,4 @@
-use chrono::Duration;
-use infrastructure::cache::permission;
-use jsonwebtoken::EncodingKey;
 use shared::config::TokenConfig;
-use std::str::FromStr;
 
 use crate::{
     dto::auth_dto::{ClientContext, LoginRequest, LoginResponse},
@@ -14,8 +10,8 @@ use domain::{
     cache::{PermissionCache, SessionCache},
     entities::{
         cached_session::CachedSession,
-        session::{DeviceType, NewSession, Session},
-        user::{self, User, UserStatus},
+        session::{NewSession, Session},
+        user::{User, UserStatus},
     },
     repositories::{RoleRepository, SessionRepo, UserRepo},
 };
@@ -67,6 +63,8 @@ where
         request: LoginRequest,
         ctx: ClientContext,
     ) -> Result<LoginResponse, AppError> {
+        let device_type = request.device_type()?;
+
         let user = self
             .user_repo
             .find_by_email(&request.email)
@@ -115,7 +113,7 @@ where
         let new_session = NewSession {
             user_id: user.id,
             refresh_token_hash: refresh_token.hash,
-            device_type: DeviceType::from_str(&request.device_type)?,
+            device_type,
             device_name: request.device_name,
             app_version: request.app_version,
             user_agent: ctx.user_agent,

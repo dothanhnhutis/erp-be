@@ -3,7 +3,7 @@ use axum::{
     extract::{FromRef, FromRequestParts},
     http::request,
 };
-use domain::entities::{session::Session, user::User};
+use domain::entities::session::Session;
 
 use crate::{error::ApiError, state::AppState};
 

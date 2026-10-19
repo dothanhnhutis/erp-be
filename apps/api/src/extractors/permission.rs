@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use application::errors::AppError;
 use axum::{
     extract::{FromRef, FromRequestParts},
@@ -7,7 +9,19 @@ use axum::{
 use crate::{error::ApiError, state::AppState};
 
 #[derive(Debug, Clone)]
-pub struct Permissions(pub Vec<String>);
+pub struct Permissions(pub HashSet<String>);
+
+impl Permissions {
+    pub fn has(&self, code: &str) -> bool {
+        self.0.contains(code)
+    }
+}
+
+impl From<Vec<String>> for Permissions {
+    fn from(codes: Vec<String>) -> Self {
+        Self(codes.into_iter().collect())
+    }
+}
 
 impl<S> FromRequestParts<S> for Permissions
 where
@@ -28,8 +42,6 @@ where
             })
     }
 }
-
-use std::marker::PhantomData;
 
 /// Mỗi permission là một kiểu, mã quyền nằm ở associated const.
 pub trait PermissionCode {

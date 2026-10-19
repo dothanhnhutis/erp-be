@@ -27,21 +27,11 @@ where
         parts: &mut request::Parts,
         _: &S,
     ) -> Result<Self, Self::Rejection> {
-        // Đọc trực tiếp từ extensions, không clone cả Vec như Permissions extractor.
-        let Permissions(codes) = parts.extensions.get::<Permissions>().ok_or_else(|| {
+        let perms = parts.extensions.get::<Permissions>().ok_or_else(|| {
             ApiError::Domain(AppError::Unauthorized("Thiếu thông tin xác thực".into()))
         })?;
 
-        // if codes.iter().any(|c| c == P::CODE) {
-        //     Ok(Self(PhantomData))
-        // } else {
-        //     Err(ApiError::Domain(AppError::Forbidden(format!(
-        //         "Bạn không có quyền: {}",
-        //         P::CODE
-        //     ))))
-        // }
-
-        if P::allows(codes) {
+        if P::allows(perms) {
             Ok(Self(PhantomData))
         } else {
             Err(ApiError::Domain(AppError::Forbidden(format!(
@@ -53,14 +43,14 @@ where
 }
 
 pub trait PermissionRule {
-    fn allows(codes: &[String]) -> bool;
+    fn allows(perms: &Permissions) -> bool;
     fn describe() -> String;
 }
 
 // Mọi PermissionCode đều là một rule đơn
 impl<P: PermissionCode> PermissionRule for P {
-    fn allows(codes: &[String]) -> bool {
-        codes.iter().any(|c| c == P::CODE)
+    fn allows(perms: &Permissions) -> bool {
+        perms.has(P::CODE)
     }
     fn describe() -> String {
         P::CODE.to_string()
@@ -69,7 +59,7 @@ impl<P: PermissionCode> PermissionRule for P {
 
 pub struct AnyOf<A, B>(PhantomData<fn() -> (A, B)>);
 impl<A: PermissionRule, B: PermissionRule> PermissionRule for AnyOf<A, B> {
-    fn allows(c: &[String]) -> bool {
+    fn allows(c: &Permissions) -> bool {
         A::allows(c) || B::allows(c)
     }
     fn describe() -> String {
@@ -79,7 +69,7 @@ impl<A: PermissionRule, B: PermissionRule> PermissionRule for AnyOf<A, B> {
 
 pub struct AllOf<A, B>(PhantomData<fn() -> (A, B)>);
 impl<A: PermissionRule, B: PermissionRule> PermissionRule for AllOf<A, B> {
-    fn allows(c: &[String]) -> bool {
+    fn allows(c: &Permissions) -> bool {
         A::allows(c) && B::allows(c)
     }
     fn describe() -> String {

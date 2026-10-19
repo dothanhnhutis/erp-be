@@ -21,7 +21,7 @@ pub async fn require_auth(
     let ext = req.extensions_mut();
     ext.insert(Me(user));
     ext.insert(UserSession(session));
-    ext.insert(Permissions(codes));
+    ext.insert(Permissions::from(codes));
 
     Ok(next.run(req).await)
 }
