@@ -3,18 +3,20 @@ use shared::config::TokenConfig;
 use crate::{
     dto::auth_dto::{ClientContext, LoginRequest, LoginResponse},
     errors::AppError,
-    security::tokens::{Claims, issue_access, new_refresh},
+    security::tokens::{Claims, hash_secret, hashes_equal, issue_access, new_refresh},
 };
 use argon2::PasswordVerifier;
 use domain::{
     cache::{PermissionCache, SessionCache},
     entities::{
         cached_session::CachedSession,
-        session::{NewSession, Session},
+        session::{DeviceType, NewSession, Session},
         user::{User, UserStatus},
     },
     repositories::{RoleRepository, SessionRepo, UserRepo},
 };
+
+const REFRESH_REUSE_GRACE_SECS: i64 = 30;
 
 pub struct AuthService<UR, USR, RR, SC, PC>
 where
@@ -202,7 +204,7 @@ where
         }
 
         // 3. Sliding: gia hạn 30 ngày.
-        let new_expires = now + self.token.refresh_ttl;
+        let new_expires = (now + self.token.refresh_ttl).min(session.absolute_expires_at);
         session.expires_at = new_expires;
 
         // 4. Throttle ghi DB; lỗi DB chỉ log (giá trị in-memory đã gia hạn).
@@ -271,5 +273,128 @@ where
             tracing::warn!("perm cache put lỗi: {e}");
         }
         Ok(codes)
+    }
+
+    pub async fn refresh(
+        &self,
+        session_id: uuid::Uuid,
+        secret: &str,
+        _ctx: ClientContext,
+    ) -> Result<(LoginResponse, DeviceType), AppError> {
+        let unauthorized = || AppError::Unauthorized("Phiên đăng nhập không hợp lệ".into());
+
+        let session = self
+            .session_repo
+            .find_by_id(session_id)
+            .await?
+            .ok_or_else(unauthorized)?;
+
+        let now = chrono::Utc::now();
+
+        if session.revoked_at.is_some() {
+            return Err(AppError::Unauthorized(
+                "Phiên đăng nhập đã bị thu hồi".into(),
+            ));
+        }
+        if session.expires_at <= now || session.absolute_expires_at <= now {
+            return Err(AppError::Unauthorized("Phiên đăng nhập đã hết hạn".into()));
+        }
+
+        let presented = hash_secret(secret);
+        if !hashes_equal(&presented, &session.refresh_token_hash) {
+            let is_previous = session
+                .previous_token_hash
+                .as_deref()
+                .is_some_and(|p| hashes_equal(&presented, p));
+            if !is_previous {
+                return Err(unauthorized());
+            }
+            let in_grace = session
+                .rotated_at
+                .is_some_and(|t| now - t <= chrono::Duration::seconds(REFRESH_REUSE_GRACE_SECS));
+            if in_grace {
+                return Err(AppError::Conflict(
+                    "Token vừa được làm mới, vui lòng thử lại".into(),
+                ));
+            }
+            // Token cũ bị dùng lại ngoài grace → nghi bị đánh cắp
+            tracing::warn!(session_id = %session.id, "refresh token reuse detected");
+            self.session_repo.revoke(session.id, "REUSED").await?;
+            if let Err(e) = self
+                .session_cache
+                .remove(
+                    session.user_id.to_string().as_ref(),
+                    session.id.to_string().as_ref(),
+                )
+                .await
+            {
+                tracing::warn!("cache remove lỗi: {e}");
+            }
+            return Err(AppError::Unauthorized(
+                "Phiên đăng nhập đã bị thu hồi".into(),
+            ));
+        }
+
+        let user = self
+            .user_repo
+            .find_by_id(session.user_id)
+            .await?
+            .ok_or_else(unauthorized)?;
+        if user.status != UserStatus::Active {
+            return Err(AppError::Unauthorized("Tài khoản đã bị vô hiệu hóa".into()));
+        }
+
+        let refresh_token = new_refresh();
+        let expires_at = (now + self.token.refresh_ttl).min(session.absolute_expires_at);
+        let access_expires_at = now + self.token.access_ttl;
+
+        let session = self
+            .session_repo
+            .rotate(
+                session.id,
+                &session.refresh_token_hash,
+                &refresh_token.hash,
+                expires_at,
+            )
+            .await?
+            .ok_or_else(|| AppError::Conflict("Token vừa được làm mới, vui lòng thử lại".into()))?;
+
+        let entry = CachedSession {
+            session: session.clone(),
+            user,
+            db_synced_at: now,
+        };
+        if let Err(e) = self
+            .session_cache
+            .put(
+                session.user_id.to_string().as_ref(),
+                session.id.to_string().as_ref(),
+                &entry,
+                self.token.session_cache_ttl.num_seconds(),
+            )
+            .await
+        {
+            tracing::warn!("cache put lỗi: {e}");
+        }
+
+        let access_token = issue_access(
+            &self.token.jwt_enc,
+            Claims {
+                sub: session.user_id,
+                sid: session.id,
+                iat: now.timestamp(),
+                exp: access_expires_at.timestamp(),
+            },
+        )?;
+
+        Ok((
+            LoginResponse {
+                access_token,
+                access_token_expires_at: access_expires_at,
+                refresh_token: format!("{}.{}", session.id, refresh_token.raw),
+                refresh_token_expires_at: expires_at,
+            },
+            session.device_type,
+        ))
     }
 }

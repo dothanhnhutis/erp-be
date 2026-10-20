@@ -58,7 +58,7 @@ fn domain_to_response(err: AppError) -> Response {
         }
         AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
 
-        AppError::Conflict(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
+        AppError::Conflict(msg) => (StatusCode::CONFLICT, msg),
     };
     (status, Json(json!({ "error": msg }))).into_response()
 }

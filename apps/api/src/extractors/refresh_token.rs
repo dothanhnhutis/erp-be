@@ -7,7 +7,7 @@ use axum_extra::extract::CookieJar;
 
 use crate::{
     error::ApiError,
-    extractors::token::{cookie_token, header_token, unauthorized},
+    helpers::token::{cookie_token, header_token, unauthorized},
     state::AppState,
 };
 

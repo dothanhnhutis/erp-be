@@ -1,6 +1,7 @@
 mod error;
 mod extractors;
 mod handlers;
+mod helpers;
 mod http;
 mod logger;
 mod middlewares;

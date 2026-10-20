@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use crate::entities::{cached_session::CachedSession, session};
+use crate::entities::cached_session::CachedSession;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CacheError {
@@ -32,7 +32,11 @@ pub trait SessionCache: Send + Sync {
         ttl_secs: i64,
     ) -> impl Future<Output = Result<(), CacheError>> + Send;
 
-    // fn remove(&self, token_hash: &str) -> impl Future<Output = Result<(), CacheError>> + Send;
+    fn remove(
+        &self,
+        user_id: &str,
+        session_id: &str,
+    ) -> impl Future<Output = Result<(), CacheError>> + Send;
 
     // fn remove_all_for_user(
     //     &self,

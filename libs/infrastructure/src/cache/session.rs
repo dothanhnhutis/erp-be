@@ -64,12 +64,14 @@ impl SessionCache for RedisSessionCache {
         Ok(())
     }
 
-    // async fn remove(&self, token_hash: &str) -> Result<(), CacheError> {
-    //     let mut conn = self.conn.clone();
-    //     // Chỉ xóa session key; phần tử thừa trong user set tự hết hạn theo TTL.
-    //     let _: () = conn.del(session_key(token_hash)).await.map_err(map_redis)?;
-    //     Ok(())
-    // }
+    async fn remove(&self, user_id: &str, session_id: &str) -> Result<(), CacheError> {
+        let mut conn = self.conn.clone();
+        let _: () = conn
+            .del(session_key(user_id, session_id))
+            .await
+            .map_err(map_redis)?;
+        Ok(())
+    }
 
     // async fn remove_all_for_user(&self, x: Uuid) -> Result<(), CacheError> {
     //     let mut conn = self.conn.clone();

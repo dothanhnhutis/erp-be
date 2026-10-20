@@ -7,11 +7,11 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-/// Số byte ngẫu nhiên trước khi hex-encode. 32 byte = 256-bit entropy.
+/// Số byte ngẫu nhiên trước khi base64url-encode. 32 byte = 256-bit entropy.
 const TOKEN_BYTES: usize = 32;
 
 /// Token session vừa được sinh.
-/// - `raw`: giá trị THÔ trả cho client (cookie + JSON), 64 ký tự hex (an toàn cho cookie/URL).
+/// - `raw`: giá trị THÔ trả cho client (cookie + JSON), 43 ký tự base64url (an toàn cho cookie/URL).
 /// - `hash`: `hex(sha256(raw))` — 64 ký tự, vừa khít cột `CHAR(64)`; chỉ giá trị này được lưu DB.
 pub struct SessionToken {
     pub raw: String,

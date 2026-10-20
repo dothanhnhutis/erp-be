@@ -23,7 +23,7 @@ impl PgSessionRepo {
 }
 
 /// Struct riêng cho DB layer — tách biệt khỏi domain entity.
-/// `ip_address` lấy về dạng text (`ip_address::text`) vì cột là kiểu INET.
+/// `ip_address` lấy về dạng text (`host(ip_address) AS ip_address`) vì cột là kiểu INET.
 #[derive(Debug, sqlx::FromRow)]
 struct SessionRow {
     id: uuid::Uuid,
@@ -78,26 +78,15 @@ const INSERT_SESSION: &str = r#"
     VALUES ($1, $2, $3, $4, $5, $6, $7::inet, $8, $9)
     RETURNING
         id, user_id, refresh_token_hash, previous_token_hash, rotated_at, device_name, device_type,
-        app_version, user_agent, ip_address::text AS ip_address,
+        app_version, user_agent, host(ip_address) AS ip_address,
         revoked_at, revoke_reason, last_seen_at, expires_at, absolute_expires_at, created_at, updated_at
-"#;
-
-const SELECT_SESSION_BY_TOKEN: &str = r#"
-    SELECT
-        id, user_id, refresh_token_hash, previous_token_hash, rotated_at,
-        device_name, device_type, app_version, user_agent,
-        ip_address::text AS ip_address,
-        revoked_at, revoke_reason, last_seen_at, expires_at, absolute_expires_at,
-        created_at, updated_at
-    FROM user_sessions
-    WHERE refresh_token_hash = $1 OR previous_token_hash = $1
 "#;
 
 const SELECT_SESSION_BY_ID: &str = r#"
     SELECT
         id, user_id, refresh_token_hash, previous_token_hash, rotated_at,
         device_name, device_type, app_version, user_agent,
-        ip_address::text AS ip_address,
+        host(ip_address) AS ip_address,
         revoked_at, revoke_reason, last_seen_at, expires_at, absolute_expires_at,
         created_at, updated_at
     FROM user_sessions
@@ -107,6 +96,31 @@ const SELECT_SESSION_BY_ID: &str = r#"
 const TOUCH_EXPIRES: &str = r#"
     UPDATE user_sessions
     SET expires_at = $2, updated_at = NOW()
+    WHERE id = $1 AND revoked_at IS NULL
+"#;
+
+const ROTATE_SESSION: &str = r#"
+    UPDATE user_sessions
+    SET previous_token_hash = refresh_token_hash,
+        refresh_token_hash  = $3,
+        rotated_at          = NOW(),
+        last_seen_at        = NOW(),
+        expires_at          = $4
+    WHERE id = $1
+      AND refresh_token_hash = $2
+      AND revoked_at IS NULL
+      AND absolute_expires_at > NOW()
+    RETURNING
+        id, user_id, refresh_token_hash, previous_token_hash, rotated_at,
+        device_name, device_type, app_version, user_agent,
+        host(ip_address) AS ip_address,
+        revoked_at, revoke_reason, last_seen_at, expires_at, absolute_expires_at,
+        created_at, updated_at
+"#;
+
+const REVOKE_SESSION: &str = r#"
+    UPDATE user_sessions
+    SET revoked_at = NOW(), revoke_reason = $2
     WHERE id = $1 AND revoked_at IS NULL
 "#;
 
@@ -128,19 +142,6 @@ impl SessionRepo for PgSessionRepo {
 
         // Ok(row.try_into())
         Ok(Session::try_from(row)?)
-    }
-
-    async fn find_by_token_hash(
-        &self,
-        token_hash: &str,
-    ) -> Result<Option<Session>, RepositoryError> {
-        let row: Option<SessionRow> = sqlx::query_as(SELECT_SESSION_BY_TOKEN)
-            .bind(token_hash)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(map_sqlx_error)?;
-
-        Ok(row.map(Session::try_from).transpose()?)
     }
 
     async fn find_by_id(&self, id: uuid::Uuid) -> Result<Option<Session>, RepositoryError> {
@@ -165,6 +166,34 @@ impl SessionRepo for PgSessionRepo {
             .await
             .map_err(map_sqlx_error)?;
 
+        Ok(())
+    }
+
+    async fn rotate(
+        &self,
+        id: uuid::Uuid,
+        old_hash: &str,
+        new_hash: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<Option<Session>, RepositoryError> {
+        let row: Option<SessionRow> = sqlx::query_as(ROTATE_SESSION)
+            .bind(id)
+            .bind(old_hash)
+            .bind(new_hash)
+            .bind(expires_at)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_error)?;
+        Ok(row.map(Session::try_from).transpose()?)
+    }
+
+    async fn revoke(&self, id: uuid::Uuid, reason: &str) -> Result<(), RepositoryError> {
+        sqlx::query(REVOKE_SESSION)
+            .bind(id)
+            .bind(reason)
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_error)?;
         Ok(())
     }
 }

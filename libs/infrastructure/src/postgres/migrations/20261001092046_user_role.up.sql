@@ -32,15 +32,16 @@ CREATE TABLE IF NOT EXISTS
         revoke_reason VARCHAR(20),
         -- 'LOGOUT'  : user tự logout
         -- 'FORCED'  : user logout tất cả thiết bị
-        -- 'USER'   : user thu hồi
+        -- 'USER'    : user thu hồi
         -- 'EXPIRED' : cleanup job đánh dấu sau khi hết hạn
+        -- 'REUSED'  : refresh token cũ bị dùng lại (nghi bị đánh cắp)
         last_seen_at TIMESTAMPTZ (3) NOT NULL DEFAULT NOW(), -- lần cuối truy cập 
         expires_at TIMESTAMPTZ (3) NOT NULL, -- hạn trượt (gia hạn mỗi lần refresh)
         absolute_expires_at TIMESTAMPTZ (3) NOT NULL, -- hạn cuối cùng
         created_at TIMESTAMPTZ (3) NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ (3) NOT NULL DEFAULT NOW(),
         CONSTRAINT chk_revoke_reason CHECK (
-            revoke_reason IN ('LOGOUT', 'FORCED', 'USER', 'EXPIRED')
+            revoke_reason IN ('LOGOUT', 'FORCED', 'USER', 'EXPIRED', 'REUSED')
         ),
         CONSTRAINT chk_user_sessions_device_type CHECK (device_type IN ('web', 'desktop', 'mobile')),
         CONSTRAINT pk_user_sessions PRIMARY KEY (id)

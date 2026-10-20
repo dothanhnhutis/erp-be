@@ -62,11 +62,6 @@ pub trait SessionRepo: Send + Sync {
         new_session: NewSession,
     ) -> impl Future<Output = Result<Session, RepositoryError>> + Send;
 
-    fn find_by_token_hash(
-        &self,
-        token_hash: &str,
-    ) -> impl Future<Output = Result<Option<Session>, RepositoryError>> + Send;
-
     fn find_by_id(
         &self,
         id: uuid::Uuid,
@@ -76,6 +71,20 @@ pub trait SessionRepo: Send + Sync {
         &self,
         id: uuid::Uuid,
         expires_at: DateTime<Utc>,
+    ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
+
+    fn rotate(
+        &self,
+        id: uuid::Uuid,
+        old_hash: &str,
+        new_hash: &str,
+        expires_at: DateTime<Utc>,
+    ) -> impl Future<Output = Result<Option<Session>, RepositoryError>> + Send;
+
+    fn revoke(
+        &self,
+        id: uuid::Uuid,
+        reason: &str,
     ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
 }
 

@@ -1,5 +1,5 @@
 use crate::error::ApiError;
-use crate::extractors::token::{bearer_token, cookie_token, unauthorized};
+use crate::helpers::token::{bearer_token, cookie_token, unauthorized};
 use crate::state::AppState;
 use application::security::tokens::{self, Claims};
 use axum::extract::{FromRef, FromRequestParts};
