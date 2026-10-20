@@ -16,7 +16,7 @@ pub struct LoginRequest {
     #[validate(email)]
     pub email: String,
     #[validate(
-        length(min = 1, message = "Email và mật khẩu không hợp lệ."),
+        length(min = 1, max = 255, message = "Email và mật khẩu không hợp lệ."),
         custom(function = "validate_password")
     )]
     pub password: String,

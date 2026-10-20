@@ -70,7 +70,10 @@ impl UserRepo for PgUserRepo {
     }
 
     async fn find_by_email(&self, email: &str) -> Result<Option<User>, RepositoryError> {
-        let sql = format!("{} WHERE email = $1 AND deleted_at IS NULL", SELECT_USER);
+        let sql = format!(
+            "{} WHERE lower(email) = lower($1) AND deleted_at IS NULL",
+            SELECT_USER
+        );
         let row: Option<UserRow> = sqlx::query_as(AssertSqlSafe(sql))
             .bind(email)
             .fetch_optional(&self.pool)

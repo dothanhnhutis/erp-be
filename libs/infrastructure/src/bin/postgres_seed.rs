@@ -17,7 +17,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
 
     let pool = sqlx::PgPool::connect(&env::var("DATABASE_URL")?).await?;
-    let email = env::var("ADMIN_EMAIL").map_err(|_| "Thiếu biến ADMIN_EMAIL")?;
+    let email = env::var("ADMIN_EMAIL")
+        .map_err(|_| "Thiếu biến ADMIN_EMAIL")?
+        .trim()
+        .to_lowercase();
     let password = env::var("ADMIN_PASSWORD").map_err(|_| "Thiếu biến ADMIN_PASSWORD")?;
 
     if password.chars().count() < 12 {
@@ -45,11 +48,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let role_id =
         role_id.ok_or("Chưa có vai trò ADMIN. Hãy chạy `sqlx migrate run` trước khi seed.")?;
 
-    // Khớp với unique index idx_users_email_unique (email) WHERE deleted_at IS NULL
+    // Khớp với unique index idx_users_email_unique (lower(email)) WHERE deleted_at IS NULL
     let created = sqlx::query(
         "INSERT INTO users (email, username, password_hash, status, password_changed_at)
          VALUES ($1, 'admin', $2, 'ACTIVE', NOW())
-         ON CONFLICT (email) WHERE deleted_at IS NULL DO NOTHING",
+         ON CONFLICT (lower(email)) WHERE deleted_at IS NULL DO NOTHING",
     )
     .bind(&email)
     .bind(&password_hash)

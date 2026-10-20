@@ -1,11 +1,16 @@
+use std::sync::LazyLock;
+
 use shared::config::TokenConfig;
 
 use crate::{
     dto::auth_dto::{ClientContext, LoginRequest, LoginResponse},
     errors::AppError,
-    security::tokens::{Claims, hash_secret, hashes_equal, issue_access, new_refresh},
+    security::{
+        password::{hash_password, verify_password},
+        tokens::{Claims, hash_secret, hashes_equal, issue_access, new_refresh},
+    },
 };
-use argon2::PasswordVerifier;
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use domain::{
     cache::{PermissionCache, SessionCache},
     entities::{
@@ -15,8 +20,15 @@ use domain::{
     },
     repositories::{RoleRepository, SessionRepo, UserRepo},
 };
+use rand::Rng;
 
 const REFRESH_REUSE_GRACE_SECS: i64 = 30;
+
+static DUMMY_HASH: LazyLock<String> = LazyLock::new(|| {
+    let mut bytes = [0u8; 32];
+    rand::rng().fill_bytes(&mut bytes);
+    hash_password(&URL_SAFE_NO_PAD.encode(bytes)).expect("hash dummy password")
+});
 
 pub struct AuthService<UR, USR, RR, SC, PC>
 where
@@ -50,6 +62,7 @@ where
         perm_cache: PC,
         token: TokenConfig,
     ) -> Self {
+        LazyLock::force(&DUMMY_HASH);
         Self {
             user_repo,
             session_repo,
@@ -69,9 +82,26 @@ where
 
         let user = self
             .user_repo
-            .find_by_email(&request.email)
-            .await?
-            .ok_or_else(|| AppError::Unauthorized("Email hoặc mật khẩu không đúng".into()))?;
+            .find_by_email(&request.email.to_lowercase())
+            .await?;
+
+        let hash_str = user
+            .as_ref()
+            .and_then(|u| u.password_hash.clone())
+            .unwrap_or_else(|| DUMMY_HASH.clone());
+
+        let ok = tokio::task::spawn_blocking(move || verify_password(&request.password, &hash_str))
+            .await
+            .map_err(|e| AppError::Internal(format!("password verify task failed: {e}")))?;
+
+        let user = match user {
+            Some(u) if ok => u,
+            _ => {
+                return Err(AppError::Unauthorized(
+                    "Email hoặc mật khẩu không đúng".into(),
+                ));
+            }
+        };
 
         match user.status {
             UserStatus::Active => {}
@@ -83,27 +113,6 @@ where
             UserStatus::Deactivated => {
                 return Err(AppError::Unauthorized("Tài khoản đã bị vô hiệu hóa".into()));
             }
-        }
-
-        let hash_str = user.password_hash.clone().ok_or_else(|| {
-            AppError::Unauthorized("Tài khoản chưa kích hoạt. Vui lòng kiểm tra email.".into())
-        })?;
-
-        let ok = tokio::task::spawn_blocking(move || {
-            argon2::PasswordHash::new(&hash_str)
-                .map(|h| {
-                    argon2::Argon2::default()
-                        .verify_password(request.password.as_bytes(), &h)
-                        .is_ok()
-                })
-                .unwrap_or(false)
-        })
-        .await
-        .map_err(|e| AppError::Internal(format!("Invalid password hash: {}", e)))?;
-        if !ok {
-            return Err(AppError::Unauthorized(
-                "Email hoặc mật khẩu không đúng".into(),
-            ));
         }
 
         let refresh_token = new_refresh();
