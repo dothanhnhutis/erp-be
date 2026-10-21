@@ -67,10 +67,10 @@ pub trait SessionRepo: Send + Sync {
         id: uuid::Uuid,
     ) -> impl Future<Output = Result<Option<Session>, RepositoryError>> + Send;
 
-    fn touch_expires(
+    fn touch_last_seen(
         &self,
         id: uuid::Uuid,
-        expires_at: DateTime<Utc>,
+        last_seen_at: DateTime<Utc>,
     ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
 
     fn rotate(

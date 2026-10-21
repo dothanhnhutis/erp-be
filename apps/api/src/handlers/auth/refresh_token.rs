@@ -19,7 +19,6 @@ pub async fn refresh_token_handler(
     jar: CookieJar,
     headers: HeaderMap,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    // RefreshToken { session_id, secret }: RefreshToken,
     token: Result<RefreshToken, ApiError>,
 ) -> Response {
     let result = async {

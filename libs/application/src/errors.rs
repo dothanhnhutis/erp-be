@@ -42,9 +42,7 @@ impl From<RepositoryError> for AppError {
             RepositoryError::NotFound => AppError::NotFound("Không tìm thấy".into()),
             RepositoryError::UniqueViolation(c) => {
                 let msg = match c.as_str() {
-                    "users_email_key" => "Email đã được sử dụng",
-                    "users_username_key" => "Username đã được sử dụng",
-                    "user_sessions_token_hash_key" => "Session token đã tồn tại",
+                    "idx_users_email_unique" => "Email đã được sử dụng",
                     _ => "Dữ liệu đã tồn tại",
                 };
                 AppError::Conflict(msg.into())

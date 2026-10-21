@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS
         revoked_at TIMESTAMPTZ (3),
         revoke_reason VARCHAR(20),
         -- 'LOGOUT'  : user tự logout
-        -- 'FORCED'  : user logout tất cả thiết bị
+        -- 'FORCED'  : user logout tất cả thiết bị / tài khoản bị khoá
         -- 'USER'    : user thu hồi
         -- 'EXPIRED' : cleanup job đánh dấu sau khi hết hạn
         -- 'REUSED'  : refresh token cũ bị dùng lại (nghi bị đánh cắp)

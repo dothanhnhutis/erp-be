@@ -93,9 +93,9 @@ const SELECT_SESSION_BY_ID: &str = r#"
     WHERE id = $1
 "#;
 
-const TOUCH_EXPIRES: &str = r#"
+const TOUCH_LAST_SEEN: &str = r#"
     UPDATE user_sessions
-    SET expires_at = $2, updated_at = NOW()
+    SET last_seen_at = $2
     WHERE id = $1 AND revoked_at IS NULL
 "#;
 
@@ -154,14 +154,14 @@ impl SessionRepo for PgSessionRepo {
         Ok(row.map(Session::try_from).transpose()?)
     }
 
-    async fn touch_expires(
+    async fn touch_last_seen(
         &self,
         id: uuid::Uuid,
-        expires_at: DateTime<Utc>,
+        last_seen_at: DateTime<Utc>,
     ) -> Result<(), RepositoryError> {
-        sqlx::query(TOUCH_EXPIRES)
+        sqlx::query(TOUCH_LAST_SEEN)
             .bind(id)
-            .bind(expires_at)
+            .bind(last_seen_at)
             .execute(&self.pool)
             .await
             .map_err(map_sqlx_error)?;

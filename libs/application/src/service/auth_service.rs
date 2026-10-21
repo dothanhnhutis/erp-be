@@ -105,13 +105,13 @@ where
 
         match user.status {
             UserStatus::Active => {}
-            UserStatus::PendingPassword => {
-                return Err(AppError::Unauthorized(
-                    "Tài khoản chưa đặt mật khẩu. Vui lòng kiểm tra email.".into(),
-                ));
-            }
             UserStatus::Deactivated => {
                 return Err(AppError::Unauthorized("Tài khoản đã bị vô hiệu hóa".into()));
+            }
+            UserStatus::PendingPassword => {
+                return Err(AppError::Unauthorized(
+                    "Email hoặc mật khẩu không đúng".into(),
+                ));
             }
         }
 
@@ -171,8 +171,8 @@ where
             }
         };
 
-        let (mut session, user, mut db_synced_at) = match cached {
-            Some(c) => (c.session, c.user, c.db_synced_at),
+        let (mut session, user, cache_miss) = match cached {
+            Some(c) => (c.session, c.user, false),
             None => {
                 let (session, user) = tokio::try_join!(
                     async {
@@ -188,63 +188,66 @@ where
                             .ok_or(AppError::Unauthorized("Thiếu thông tin xác thực".into()))
                     }
                 )?;
-                let synced = session.last_seen_at;
-                (session, user, synced)
+                (session, user, true)
             }
         };
 
         let now = chrono::Utc::now();
 
-        if session.revoked_at.is_some() {
-            // let _ = self.cache.remove(&token_hash).await;
-            return Err(AppError::Unauthorized(
-                "Phiên đăng nhập đã bị thu hồi".into(),
-            ));
-        }
-        if session.expires_at <= now {
-            // let _ = self.cache.remove(&token_hash).await;
-            // TODO:  vô hiệu hoá session db luôn  (revoke_reason 'EXPIRED')
-            return Err(AppError::Unauthorized("Phiên đăng nhập đã hết hạn".into()));
-        }
-        if user.status == UserStatus::Deactivated {
-            // let _ = self.cache.remove(&token_hash).await;
-            // TODO: vô hiệu hoá session db luôn  (revoke_reason 'EXPIRED')
-            return Err(AppError::Unauthorized("Tài khoản đã bị vô hiệu hóa".into()));
-        }
-
-        // 3. Sliding: gia hạn 30 ngày.
-        let new_expires = (now + self.token.refresh_ttl).min(session.absolute_expires_at);
-        session.expires_at = new_expires;
-
-        // 4. Throttle ghi DB; lỗi DB chỉ log (giá trị in-memory đã gia hạn).
-        if now - db_synced_at >= self.token.session_db_sync {
-            match self
-                .session_repo
-                .touch_expires(session.id, new_expires)
+        let invalid = if session.expires_at <= now {
+            Some(("EXPIRED", "Phiên đăng nhập đã hết hạn"))
+        } else if user.status != UserStatus::Active {
+            Some(("FORCED", "Tài khoản đã bị vô hiệu hóa"))
+        } else {
+            None
+        };
+        if let Some((reason, msg)) = invalid {
+            if let Err(e) = self.session_repo.revoke(session.id, reason).await {
+                tracing::warn!("revoke {reason} lỗi: {e}");
+            }
+            if let Err(e) = self
+                .session_cache
+                .remove(
+                    claims.sub.to_string().as_ref(),
+                    claims.sid.to_string().as_ref(),
+                )
                 .await
             {
-                Ok(()) => db_synced_at = now,
-                Err(e) => tracing::warn!("touch_expires lỗi: {e}"),
+                tracing::warn!("cache remove lỗi: {e}");
+            }
+            return Err(AppError::Unauthorized(msg.into()));
+        }
+
+        // 3. Throttle ghi DB; lỗi DB chỉ log.
+        let mut touched = false;
+        if now - session.last_seen_at >= self.token.session_db_sync {
+            match self.session_repo.touch_last_seen(session.id, now).await {
+                Ok(()) => {
+                    session.last_seen_at = now;
+                    touched = true;
+                }
+                Err(e) => tracing::warn!("touch_last_seen lỗi: {e}"),
             }
         }
 
-        // 5. Refresh cache + gia hạn TTL bản cache (fail-open).
-        let entry = CachedSession {
-            session: session.clone(),
-            user: user.clone(),
-            db_synced_at,
-        };
-        if let Err(e) = self
-            .session_cache
-            .put(
-                claims.sub.to_string().as_ref(),
-                claims.sid.to_string().as_ref(),
-                &entry,
-                self.token.session_cache_ttl.num_seconds(),
-            )
-            .await
-        {
-            tracing::warn!("cache put lỗi: {e}");
+        // 4. Refresh cache.
+        if cache_miss || touched {
+            let entry = CachedSession {
+                session: session.clone(),
+                user: user.clone(),
+            };
+            if let Err(e) = self
+                .session_cache
+                .put(
+                    claims.sub.to_string().as_ref(),
+                    claims.sid.to_string().as_ref(),
+                    &entry,
+                    self.token.session_cache_ttl.num_seconds(),
+                )
+                .await
+            {
+                tracing::warn!("cache put lỗi: {e}");
+            }
         }
 
         let permission_codes = self.load_permissions(claims.sub).await?;
@@ -288,7 +291,7 @@ where
         &self,
         session_id: uuid::Uuid,
         secret: &str,
-        _ctx: ClientContext,
+        ctx: ClientContext,
     ) -> Result<(LoginResponse, DeviceType), AppError> {
         let unauthorized = || AppError::Unauthorized("Phiên đăng nhập không hợp lệ".into());
 
@@ -353,6 +356,13 @@ where
             return Err(AppError::Unauthorized("Tài khoản đã bị vô hiệu hóa".into()));
         }
 
+        if session.user_agent != ctx.user_agent {
+            tracing::warn!(session_id = %session.id, expected = ?session.user_agent, got = ?ctx.user_agent, "refresh: user-agent không khớp session");
+        }
+        if session.ip_address != ctx.ip_address {
+            tracing::warn!(session_id = %session.id, expected = ?session.ip_address, got = ?ctx.ip_address, "refresh: IP khác lúc đăng nhập");
+        }
+
         let refresh_token = new_refresh();
         let expires_at = (now + self.token.refresh_ttl).min(session.absolute_expires_at);
         let access_expires_at = now + self.token.access_ttl;
@@ -371,7 +381,6 @@ where
         let entry = CachedSession {
             session: session.clone(),
             user,
-            db_synced_at: now,
         };
         if let Err(e) = self
             .session_cache
@@ -405,5 +414,20 @@ where
             },
             session.device_type,
         ))
+    }
+
+    pub async fn logout(&self, session: &Session) -> Result<(), AppError> {
+        self.session_repo.revoke(session.id, "LOGOUT").await?;
+        if let Err(e) = self
+            .session_cache
+            .remove(
+                session.user_id.to_string().as_ref(),
+                session.id.to_string().as_ref(),
+            )
+            .await
+        {
+            tracing::warn!("cache remove lỗi: {e}");
+        }
+        Ok(())
     }
 }
