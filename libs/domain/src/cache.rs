@@ -2,6 +2,14 @@ use uuid::Uuid;
 
 use crate::entities::cached_session::CachedSession;
 
+/// Kết quả tra cache phiên.
+pub enum SessionLookup {
+    Hit(Box<CachedSession>),
+    /// Phiên đã bị thu hồi (tombstone) — chặn ngay, không cần xuống DB.
+    Revoked,
+    Miss,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum CacheError {
     /// (de)serialize value hỏng — bug hoặc lệch schema
@@ -22,28 +30,33 @@ pub trait SessionCache: Send + Sync {
         &self,
         user_id: &str,
         session_id: &str,
-    ) -> impl Future<Output = Result<Option<CachedSession>, CacheError>> + Send;
+    ) -> impl Future<Output = Result<SessionLookup, CacheError>> + Send;
 
+    /// Ghi cache, KHÔNG ghi đè tombstone. Trả `false` nếu bị tombstone chặn
+    /// (phiên vừa bị thu hồi trong lúc request đang chạy).
     fn put(
         &self,
         user_id: &str,
         session_id: &str,
         entry: &CachedSession,
         ttl_secs: i64,
-    ) -> impl Future<Output = Result<(), CacheError>> + Send;
+    ) -> impl Future<Output = Result<bool, CacheError>> + Send;
 
-    fn remove(
+    /// Đánh dấu phiên đã thu hồi (thay cho `remove`).
+    fn mark_revoked(
         &self,
         user_id: &str,
         session_id: &str,
+        ttl_secs: i64,
     ) -> impl Future<Output = Result<(), CacheError>> + Send;
 
-    // fn remove_all_for_user(
-    //     &self,
-    //     user_id: Uuid,
-    // ) -> impl Future<Output = Result<(), CacheError>> + Send;
-
-    // fn is_revoked(&self, id: uuid::Uuid) -> impl Future<Output = Result<bool, CacheError>> + Send;
+    /// Thu hồi nhiều phiên của 1 user (khoá tài khoản / logout mọi thiết bị).
+    fn mark_revoked_many(
+        &self,
+        user_id: &str,
+        session_ids: &[Uuid],
+        ttl_secs: i64,
+    ) -> impl Future<Output = Result<(), CacheError>> + Send;
 }
 
 /// Port cache permission theo user, có version toàn cục để invalidate hàng loạt.

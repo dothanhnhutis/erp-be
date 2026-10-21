@@ -71,7 +71,7 @@ pub trait SessionRepo: Send + Sync {
         &self,
         id: uuid::Uuid,
         last_seen_at: DateTime<Utc>,
-    ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
+    ) -> impl Future<Output = Result<bool, RepositoryError>> + Send;
 
     fn rotate(
         &self,

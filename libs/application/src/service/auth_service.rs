@@ -12,7 +12,7 @@ use crate::{
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use domain::{
-    cache::{PermissionCache, SessionCache},
+    cache::{PermissionCache, SessionCache, SessionLookup},
     entities::{
         cached_session::CachedSession,
         session::{DeviceType, NewSession, Session},
@@ -152,19 +152,40 @@ where
         })
     }
 
+    fn tombstone_ttl(&self) -> i64 {
+        // access token cũ sống tối đa access_ttl (+ leeway 30s khi verify) → dư 60s
+        self.token.access_ttl.num_seconds() + 60
+    }
+
+    async fn mark_revoked_cache(&self, user_id: uuid::Uuid, session_id: uuid::Uuid) {
+        if let Err(e) = self
+            .session_cache
+            .mark_revoked(
+                user_id.to_string().as_ref(),
+                session_id.to_string().as_ref(),
+                self.tombstone_ttl(),
+            )
+            .await
+        {
+            tracing::warn!("cache mark_revoked lỗi: {e}");
+        }
+    }
+
     pub async fn authentication(
         &self,
         claims: &Claims,
     ) -> Result<(Session, User, Vec<String>), AppError> {
-        let cached = match self
-            .session_cache
-            .get(
-                claims.sub.to_string().as_ref(),
-                claims.sid.to_string().as_ref(),
-            )
-            .await
-        {
-            Ok(hit) => hit,
+        let sub = claims.sub.to_string();
+        let sid = claims.sid.to_string();
+
+        let cached = match self.session_cache.get(&sub, &sid).await {
+            Ok(SessionLookup::Hit(c)) => Some(*c),
+            Ok(SessionLookup::Revoked) => {
+                return Err(AppError::Unauthorized(
+                    "Phiên đăng nhập đã bị thu hồi".into(),
+                ));
+            }
+            Ok(SessionLookup::Miss) => None,
             Err(e) => {
                 tracing::warn!("cache get lỗi, fallback DB: {e}");
                 None
@@ -194,6 +215,13 @@ where
 
         let now = chrono::Utc::now();
 
+        if session.revoked_at.is_some() {
+            self.mark_revoked_cache(claims.sub, claims.sid).await;
+            return Err(AppError::Unauthorized(
+                "Phiên đăng nhập đã bị thu hồi".into(),
+            ));
+        }
+
         let invalid = if session.expires_at <= now {
             Some(("EXPIRED", "Phiên đăng nhập đã hết hạn"))
         } else if user.status != UserStatus::Active {
@@ -205,16 +233,7 @@ where
             if let Err(e) = self.session_repo.revoke(session.id, reason).await {
                 tracing::warn!("revoke {reason} lỗi: {e}");
             }
-            if let Err(e) = self
-                .session_cache
-                .remove(
-                    claims.sub.to_string().as_ref(),
-                    claims.sid.to_string().as_ref(),
-                )
-                .await
-            {
-                tracing::warn!("cache remove lỗi: {e}");
-            }
+            self.mark_revoked_cache(claims.sub, claims.sid).await;
             return Err(AppError::Unauthorized(msg.into()));
         }
 
@@ -222,9 +241,15 @@ where
         let mut touched = false;
         if now - session.last_seen_at >= self.token.session_db_sync {
             match self.session_repo.touch_last_seen(session.id, now).await {
-                Ok(()) => {
+                Ok(true) => {
                     session.last_seen_at = now;
                     touched = true;
+                }
+                Ok(false) => {
+                    self.mark_revoked_cache(claims.sub, claims.sid).await;
+                    return Err(AppError::Unauthorized(
+                        "Phiên đăng nhập đã bị thu hồi".into(),
+                    ));
                 }
                 Err(e) => tracing::warn!("touch_last_seen lỗi: {e}"),
             }
@@ -236,17 +261,23 @@ where
                 session: session.clone(),
                 user: user.clone(),
             };
-            if let Err(e) = self
+            match self
                 .session_cache
                 .put(
-                    claims.sub.to_string().as_ref(),
-                    claims.sid.to_string().as_ref(),
+                    &sub,
+                    &sid,
                     &entry,
                     self.token.session_cache_ttl.num_seconds(),
                 )
                 .await
             {
-                tracing::warn!("cache put lỗi: {e}");
+                Ok(true) => {}
+                Ok(false) => {
+                    return Err(AppError::Unauthorized(
+                        "Phiên đăng nhập đã bị thu hồi".into(),
+                    ));
+                }
+                Err(e) => tracing::warn!("cache put lỗi: {e}"),
             }
         }
 
@@ -332,16 +363,7 @@ where
             // Token cũ bị dùng lại ngoài grace → nghi bị đánh cắp
             tracing::warn!(session_id = %session.id, "refresh token reuse detected");
             self.session_repo.revoke(session.id, "REUSED").await?;
-            if let Err(e) = self
-                .session_cache
-                .remove(
-                    session.user_id.to_string().as_ref(),
-                    session.id.to_string().as_ref(),
-                )
-                .await
-            {
-                tracing::warn!("cache remove lỗi: {e}");
-            }
+            self.mark_revoked_cache(session.user_id, session.id).await;
             return Err(AppError::Unauthorized(
                 "Phiên đăng nhập đã bị thu hồi".into(),
             ));
@@ -382,7 +404,7 @@ where
             session: session.clone(),
             user,
         };
-        if let Err(e) = self
+        match self
             .session_cache
             .put(
                 session.user_id.to_string().as_ref(),
@@ -392,7 +414,13 @@ where
             )
             .await
         {
-            tracing::warn!("cache put lỗi: {e}");
+            Ok(true) => {}
+            Ok(false) => {
+                return Err(AppError::Unauthorized(
+                    "Phiên đăng nhập đã bị thu hồi".into(),
+                ));
+            }
+            Err(e) => tracing::warn!("cache put lỗi: {e}"),
         }
 
         let access_token = issue_access(
@@ -418,16 +446,7 @@ where
 
     pub async fn logout(&self, session: &Session) -> Result<(), AppError> {
         self.session_repo.revoke(session.id, "LOGOUT").await?;
-        if let Err(e) = self
-            .session_cache
-            .remove(
-                session.user_id.to_string().as_ref(),
-                session.id.to_string().as_ref(),
-            )
-            .await
-        {
-            tracing::warn!("cache remove lỗi: {e}");
-        }
+        self.mark_revoked_cache(session.user_id, session.id).await;
         Ok(())
     }
 }

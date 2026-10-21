@@ -158,15 +158,15 @@ impl SessionRepo for PgSessionRepo {
         &self,
         id: uuid::Uuid,
         last_seen_at: DateTime<Utc>,
-    ) -> Result<(), RepositoryError> {
-        sqlx::query(TOUCH_LAST_SEEN)
+    ) -> Result<bool, RepositoryError> {
+        let res = sqlx::query(TOUCH_LAST_SEEN)
             .bind(id)
             .bind(last_seen_at)
             .execute(&self.pool)
             .await
             .map_err(map_sqlx_error)?;
 
-        Ok(())
+        Ok(res.rows_affected() == 1)
     }
 
     async fn rotate(
