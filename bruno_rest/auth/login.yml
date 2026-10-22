@@ -1,0 +1,43 @@
+info:
+  name: login
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{base_url}}/api/v1/auth/login"
+  body:
+    type: json
+    data: |-
+      {
+        "email": "dothanhnhutis@gmail.com",
+        "password": "@Bietdoi1133",
+        "app_version": "1.0.0",
+        "device_type": "web"
+      }
+  auth: inherit
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        const raw = [].concat(res.headers['set-cookie'] || []).join(', ');
+
+        function getCookie(name) {
+          const match = raw.match(new RegExp('(?:^|[;,]\\s*)' + name + '=([^;,\\s]+)'));
+          return match ? match[1] : null;
+        }
+
+        const accessToken = getCookie('access_token');
+        const refreshToken = getCookie('refresh_token');
+
+        if (accessToken) bru.setGlobalEnvVar('access_token', accessToken);
+        if (refreshToken) bru.setGlobalEnvVar('refresh_token', refreshToken);
+
+        console.log({ accessToken, refreshToken });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

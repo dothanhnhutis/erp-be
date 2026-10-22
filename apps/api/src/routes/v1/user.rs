@@ -1,4 +1,8 @@
-use axum::{Router, extract::FromRef, routing::get};
+use axum::{
+    Router,
+    extract::FromRef,
+    routing::{get, post},
+};
 
 use crate::{handlers::user, state::AppState};
 
@@ -7,5 +11,7 @@ where
     S: Clone + Send + Sync + 'static,
     AppState: FromRef<S>,
 {
-    Router::new().route("/me", get(user::me_handler))
+    Router::new()
+        .route("/me", get(user::me_handler))
+        .route("/", post(user::create_usere_handler))
 }

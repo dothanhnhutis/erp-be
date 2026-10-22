@@ -18,7 +18,7 @@ use domain::{
         session::{DeviceType, NewSession, Session},
         user::{User, UserStatus},
     },
-    repositories::{RoleRepository, SessionRepo, UserRepo},
+    repositories::{RoleRepo, SessionRepo, UserRepo},
 };
 use rand::Rng;
 
@@ -34,7 +34,7 @@ pub struct AuthService<UR, USR, RR, SC, PC>
 where
     UR: UserRepo,
     USR: SessionRepo,
-    RR: RoleRepository,
+    RR: RoleRepo,
     SC: SessionCache,
     PC: PermissionCache,
 {
@@ -50,7 +50,7 @@ impl<UR, USR, RR, SC, PC> AuthService<UR, USR, RR, SC, PC>
 where
     UR: UserRepo,
     USR: SessionRepo,
-    RR: RoleRepository,
+    RR: RoleRepo,
     SC: SessionCache,
     PC: PermissionCache,
 {

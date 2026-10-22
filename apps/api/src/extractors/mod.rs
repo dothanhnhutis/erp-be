@@ -1,3 +1,4 @@
+pub mod actor;
 pub mod jwt;
 pub mod permission;
 pub mod refresh_token;

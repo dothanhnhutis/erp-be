@@ -46,3 +46,9 @@ pub struct User {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateUserWithRoles {
+    pub email: String,
+    pub role_ids: Vec<uuid::Uuid>,
+}

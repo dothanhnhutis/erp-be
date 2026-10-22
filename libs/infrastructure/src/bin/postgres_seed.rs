@@ -66,17 +66,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .fetch_one(&mut *tx)
             .await?;
 
+    // Khôi phục role ADMIN: ACTIVE, không bị xoá, khoá sửa/xoá, có MỌI permission.
     sqlx::query(
-        "INSERT INTO user_roles (user_id, role_id)
-         VALUES ($1::uuid, $2::uuid)
-         ON CONFLICT DO NOTHING",
+        "UPDATE roles
+     SET status = 'ACTIVE', deactivated_at = NULL, deleted_at = NULL,
+         can_update = FALSE, can_delete = FALSE
+     WHERE id = $1::uuid",
     )
-    .bind(&user_id)
     .bind(&role_id)
     .execute(&mut *tx)
     .await?;
 
+    sqlx::query(
+        "INSERT INTO role_permissions (role_id, permission_id)
+     SELECT $1::uuid, p.id FROM permissions p
+     ON CONFLICT DO NOTHING",
+    )
+    .bind(&role_id)
+    .execute(&mut *tx)
+    .await?;
+
+    // Mở lại tài khoản admin nếu bị khoá (chỉ khi đã có mật khẩu — thoả chk_users_pending_password).
+    sqlx::query(
+        "UPDATE users SET status = 'ACTIVE', deactivated_at = NULL
+     WHERE id = $1::uuid AND password_hash IS NOT NULL",
+    )
+    .bind(&user_id)
+    .execute(&mut *tx)
+    .await?;
+
     tx.commit().await?;
+    let redis_url = env::var("REDIS_URL")?;
+    let mut conn = infrastructure::cache::connect::init_redis(&redis_url).await?;
+    let _: u64 = redis::AsyncCommands::incr(&mut conn, "perm:ver", 1).await?;
+    println!("Đã khôi phục quyền ADMIN và làm mới cache permission");
 
     if created == 1 {
         println!("Đã tạo admin {email} (id {user_id})");

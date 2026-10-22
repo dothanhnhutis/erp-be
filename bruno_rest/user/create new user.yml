@@ -1,0 +1,24 @@
+info:
+  name: create new user
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{base_url}}/api/v1/users"
+  body:
+    type: json
+    data: |-
+      {
+        "email": "gaconght@gmail.com",
+        "role_ids": [
+          "01a15db2-758e-77b4-a5bd-f28638d21ba7"
+        ]
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

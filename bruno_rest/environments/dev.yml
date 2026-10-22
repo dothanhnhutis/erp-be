@@ -1,0 +1,4 @@
+name: dev
+variables:
+  - name: base_url
+    value: http://localhost:4000
