@@ -15,6 +15,8 @@ Cập nhật: 2026-10-22. Trạng thái việc dở xem [TODO.md](TODO.md).
 ## Lớp 1 — role hệ thống bất biến
 - Bảng `roles` có `can_update`, `can_delete`; role `ADMIN` đặt cả hai = `FALSE` (migration `default_role_permission`).
 - `RoleService` (sửa permission, đổi tên, xoá role) **kiểm tra đầu tiên** `can_update` / `can_delete` → 403 "Không thể sửa vai trò hệ thống". Không ngoại lệ, kể cả admin.
+- Chặn thêm ở tầng DB: `PgRoleRepo::replace_permissions` mở transaction bằng `UPDATE roles … WHERE can_update RETURNING id` (vừa khoá dòng role, vừa từ chối role hệ thống dù service có sót kiểm tra).
+- Thứ tự kiểm tra khi sửa permission role: lớp 1 (403) → mọi code tồn tại (400) → lớp 2 (403). "Code tồn tại" phải đứng trước lớp 2: actor không bao giờ có code không tồn tại, nên để sau thì lớp 2 trả nhầm 403.
 - Permission của ADMIN chỉ đổi qua migration (bước cuối migration luôn cấp mọi permission mới cho ADMIN).
 - Tuỳ chọn sau này: trigger DB chặn ghi `role_permissions` của role `can_update = false`, chừa bypass cho migration/seed qua `current_setting('app.bypass_system_role', true)`.
 
@@ -29,7 +31,7 @@ Chọn quy tắc theo **permission** (không theo "phải giữ role đó") vì:
 | Tạo user | role tồn tại + ACTIVE; `ensure_covers(permission của các role được gán)` | ✅ đã làm (`UserService::create_user`) |
 | Sửa role của user | `ensure_not_self` + `ensure_covers(quyền hiện tại của target)` + `ensure_covers(quyền của role mới)` | chưa có API |
 | Khoá / xoá user | `ensure_not_self` + `ensure_covers(quyền hiện tại của target)` → revoke mọi phiên | chưa có API |
-| Sửa permission của role | `can_update` + `ensure_covers(quyền hiện tại của role)` + `ensure_covers(quyền mới)` + `bump_version` | khung `RoleService::update_permissions` |
+| Sửa permission của role | `can_update` + mọi code tồn tại + `ensure_covers(quyền hiện tại của role)` + `ensure_covers(quyền mới)` + `bump_version` | ✅ `PUT /api/v1/roles/{id}/permissions` (`RoleService::update_permissions`) — còn TOCTOU ở lớp 2a, xem TODO |
 | Xoá role | `can_delete` + `ensure_covers(quyền hiện tại của role)` | chưa có |
 
 Thêm: **không gỡ role ADMIN khỏi admin ACTIVE cuối cùng** (khi sửa role user / khoá user).
@@ -47,5 +49,7 @@ Chạy được chỉ khi có quyền truy cập server/DB. Trong 1 transaction:
 
 Sau commit: `INCR perm:ver` trong Redis để cache permission cũ bị bỏ ngay.
 
+Hạn chế hiện tại: câu lấy `role_id` lọc `deleted_at IS NULL` → nếu ADMIN bị xoá mềm trực tiếp trong DB thì seed báo lỗi thay vì khôi phục (xem TODO).
+
 ## Truy vết
-`audit_logs` có trigger trên `role_permissions`, `user_roles`… → tra được ai gỡ quyền gì. Cột `changed_by` chỉ đúng khi app set biến session (vd `set_config('app.user_id', …, true)`) trong mỗi transaction — chưa làm.
+`audit_logs` có trigger trên `role_permissions`, `user_roles`… → tra được ai gỡ quyền gì. Vì vậy khi thay danh sách (vd `replace_permissions`) chỉ `DELETE` phần bị bỏ và `INSERT … ON CONFLICT DO NOTHING` phần mới — không xoá hết rồi chèn lại, để log không bị nhiễu. Cột `changed_by` chỉ đúng khi app set biến session (vd `set_config('app.user_id', …, true)`) trong mỗi transaction — chưa làm.

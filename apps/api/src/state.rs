@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use application::service::{
     auth_service::{self, AuthService},
+    role_service::RoleService,
     user_service::UserService,
 };
 use axum::extract::FromRef;
@@ -18,6 +19,8 @@ pub struct AppState {
         AuthService<PgUserRepo, PgSessionRepo, PgRoleRepo, RedisSessionCache, RedisPermissionCache>,
     >,
     pub user_service: Arc<UserService<PgUserRepo, PgRoleRepo>>,
+    pub role_service: Arc<RoleService<PgRoleRepo, RedisPermissionCache>>,
+
     pub config: Arc<AppConfig>,
 }
 
@@ -44,15 +47,18 @@ impl AppState {
             pg_session_repo.clone(),
             pg_role_repo.clone(),
             session_cache,
-            per_cache,
+            per_cache.clone(),
             token,
         ));
 
         let user_service = Arc::new(UserService::new(pg_user_repo.clone(), pg_role_repo.clone()));
 
+        let role_service = Arc::new(RoleService::new(pg_role_repo.clone(), per_cache.clone()));
+
         Self {
             auth_service,
             user_service,
+            role_service,
             config: Arc::new(config),
         }
     }

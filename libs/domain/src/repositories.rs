@@ -109,12 +109,27 @@ pub trait RoleRepo: Send + Sync {
         role_ids: &[uuid::Uuid],
     ) -> impl Future<Output = Result<Vec<RolePermissions>, RepositoryError>> + Send;
 
-    // fn find_by_id(
-    //     &self,
-    //     id: uuid::Uuid,
-    // ) -> impl Future<Output = Result<Option<Role>, RepositoryError>> + Send;
-    // fn find_permission_codes_for_role(
-    //     &self,
-    //     id: uuid::Uuid,
-    // ) -> impl Future<Output = Result<Vec<String>, RepositoryError>> + Send;
+    fn find_by_id(
+        &self,
+        id: uuid::Uuid,
+    ) -> impl Future<Output = Result<Option<Role>, RepositoryError>> + Send;
+
+    fn find_permission_codes_for_role(
+        &self,
+        id: uuid::Uuid,
+    ) -> impl Future<Output = Result<Vec<String>, RepositoryError>> + Send;
+
+    /// Lọc ra những code thật sự có trong bảng `permissions`.
+    fn find_existing_permission_codes(
+        &self,
+        codes: &[String],
+    ) -> impl Future<Output = Result<Vec<String>, RepositoryError>> + Send;
+
+    /// Thay toàn bộ permission của role trong 1 transaction.
+    /// `NotFound` nếu role không tồn tại / không cho sửa / có code không tồn tại.
+    fn replace_permissions(
+        &self,
+        role_id: uuid::Uuid,
+        codes: &[String],
+    ) -> impl Future<Output = Result<(), RepositoryError>> + Send;
 }

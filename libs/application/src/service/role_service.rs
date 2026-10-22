@@ -1,54 +1,96 @@
-use domain::repositories::RoleRepo;
+use domain::{
+    cache::PermissionCache,
+    repositories::{RepositoryError, RoleRepo},
+};
 
-use crate::{errors::AppError, security::authorization::Actor};
+use crate::{
+    dto::role_dto::UpdateRolePermissionsRequest, errors::AppError, security::authorization::Actor,
+};
 
-pub struct RoleService<RR>
+pub struct RoleService<RR, PC>
 where
     RR: RoleRepo,
+    PC: PermissionCache,
 {
     role_repo: RR,
+    perm_cache: PC,
 }
 
-impl<RR> RoleService<RR>
+impl<RR, PC> RoleService<RR, PC>
 where
     RR: RoleRepo,
+    PC: PermissionCache,
 {
-    pub fn new(role_repo: RR) -> Self {
-        Self { role_repo }
+    pub fn new(role_repo: RR, perm_cache: PC) -> Self {
+        Self {
+            role_repo,
+            perm_cache,
+        }
     }
 
-    // pub async fn update_permissions(
-    //     &self,
-    //     actor: &Actor,
-    //     role_id: uuid::Uuid,
-    //     new_codes: Vec<String>,
-    // ) -> Result<(), AppError> {
-    //     let role = self
-    //         .role_repo
-    //         .find_by_id(role_id)
-    //         .await?
-    //         .filter(|r| r.deleted_at.is_none())
-    //         .ok_or_else(|| AppError::NotFound("Vai trò không tồn tại".into()))?;
+    pub async fn update_permissions(
+        &self,
+        actor: &Actor,
+        role_id: uuid::Uuid,
+        payload: UpdateRolePermissionsRequest,
+    ) -> Result<(), AppError> {
+        let mut new_codes: Vec<String> = payload
+            .permission_codes
+            .into_iter()
+            .map(|c| c.trim().to_owned())
+            .collect();
+        new_codes.sort();
+        new_codes.dedup();
 
-    //     // Lớp 1: role hệ thống — không ai được sửa, kể cả admin.
-    //     if !role.can_update {
-    //         return Err(AppError::Forbidden("Không thể sửa vai trò hệ thống".into()));
-    //     }
+        let role = self
+            .role_repo
+            .find_by_id(role_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Vai trò không tồn tại".into()))?;
 
-    //     // Lớp 2a: role hiện tại không được mạnh hơn actor (không đụng vào role "cấp trên").
-    //     let current = self
-    //         .role_repo
-    //         .find_permission_codes_for_role(role_id)
-    //         .await?;
-    //     actor.ensure_covers(&current, "sửa vai trò này")?;
+        // Lớp 1
+        if !role.can_update {
+            return Err(AppError::Forbidden("Không thể sửa vai trò hệ thống".into()));
+        }
 
-    //     // Lớp 2b: không được cấp quyền mình không có.
-    //     actor.ensure_covers(&new_codes, "cấp quyền")?;
+        // Lớp 2a + 2b — kiểm tra quyền TRƯỚC khi báo code nào không tồn tại.
+        let current = self
+            .role_repo
+            .find_permission_codes_for_role(role_id)
+            .await?;
+        // Mọi code phải tồn tại.
+        let existing = self
+            .role_repo
+            .find_existing_permission_codes(&new_codes)
+            .await?;
+        actor.ensure_covers(&current, "sửa vai trò này")?;
+        actor.ensure_covers(&new_codes, "cấp quyền")?;
 
-    //     // ... kiểm tra mọi code trong new_codes tồn tại, rồi thay role_permissions trong 1 transaction ...
+        if existing.len() != new_codes.len() {
+            let unknown: Vec<&str> = new_codes
+                .iter()
+                .filter(|c| !existing.contains(c))
+                .map(String::as_str)
+                .collect();
+            return Err(AppError::Validation(format!(
+                "Quyền không tồn tại: {}",
+                unknown.join(", ")
+            )));
+        }
 
-    //     // Quyền của mọi user giữ role này đổi → làm mới cache permission.
-    //     // self.perm_cache.bump_version().await  (log warn nếu lỗi)
-    //     Ok(())
-    // }
+        self.role_repo
+            .replace_permissions(role_id, &new_codes)
+            .await
+            .map_err(|e| match e {
+                // Race: role vừa bị xoá / bị khoá sửa giữa lúc kiểm tra và ghi.
+                RepositoryError::NotFound => AppError::NotFound("Vai trò không tồn tại".into()),
+                e => e.into(),
+            })?;
+
+        // Quyền của mọi user giữ role này đổi → bỏ cache cũ. DB đã đúng nên chỉ log.
+        if let Err(e) = self.perm_cache.bump_version().await {
+            tracing::warn!("bump perm version lỗi: {e}");
+        }
+        Ok(())
+    }
 }

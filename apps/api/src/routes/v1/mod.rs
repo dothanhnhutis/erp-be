@@ -1,5 +1,7 @@
 mod auth;
+mod role;
 mod user;
+
 use axum::{Router, extract::FromRef, middleware::from_fn_with_state};
 
 use crate::{middlewares::auth_middleware, state::AppState};
@@ -14,6 +16,7 @@ where
     let private_route = Router::new()
         .nest("/users", user::create_routes())
         .nest("/auth", auth::create_private_routes())
+        .nest("/roles", role::create_routes())
         .route_layer(from_fn_with_state(state, auth_middleware::require_auth));
 
     public_route.merge(private_route)

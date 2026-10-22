@@ -65,6 +65,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .bind(&email)
             .fetch_one(&mut *tx)
             .await?;
+    // Đảm bảo admin có role ADMIN (chạy lại nhiều lần vẫn an toàn).
+    sqlx::query(
+        "INSERT INTO user_roles (user_id, role_id) VALUES ($1::uuid, $2::uuid)
+         ON CONFLICT DO NOTHING",
+    )
+    .bind(&user_id)
+    .bind(&role_id)
+    .execute(&mut *tx)
+    .await?;
 
     // Khôi phục role ADMIN: ACTIVE, không bị xoá, khoá sửa/xoá, có MỌI permission.
     sqlx::query(
