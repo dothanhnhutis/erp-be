@@ -145,9 +145,7 @@ impl RoleRepo for PgRoleRepo {
 
         // Khoá dòng role + chặn lớp 1 ngay ở DB (role hệ thống can_update = FALSE).
         let locked: Option<uuid::Uuid> = sqlx::query_scalar(
-            "UPDATE roles SET updated_at = NOW()
-             WHERE id = $1 AND deleted_at IS NULL AND can_update
-             RETURNING id",
+            "SELECT id FROM roles WHERE id = $1 AND deleted_at IS NULL AND can_update FOR UPDATE",
         )
         .bind(role_id)
         .fetch_optional(&mut *tx)
@@ -189,10 +187,6 @@ impl RoleRepo for PgRoleRepo {
         .execute(&mut *tx)
         .await
         .map_err(map_sqlx_error)?;
-
-        if inserted as usize != codes.len() {
-            return Err(RepositoryError::NotFound);
-        }
 
         tx.commit().await.map_err(map_sqlx_error)?;
         Ok(())

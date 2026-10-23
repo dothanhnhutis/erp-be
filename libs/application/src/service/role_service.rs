@@ -63,8 +63,6 @@ where
             .role_repo
             .find_existing_permission_codes(&new_codes)
             .await?;
-        actor.ensure_covers(&current, "sửa vai trò này")?;
-        actor.ensure_covers(&new_codes, "cấp quyền")?;
 
         if existing.len() != new_codes.len() {
             let unknown: Vec<&str> = new_codes
@@ -77,6 +75,8 @@ where
                 unknown.join(", ")
             )));
         }
+        actor.ensure_covers(&current, "sửa vai trò này")?;
+        actor.ensure_covers(&new_codes, "cấp quyền")?;
 
         self.role_repo
             .replace_permissions(role_id, &new_codes)

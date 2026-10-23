@@ -7,7 +7,6 @@ use crate::{
 };
 
 use domain::repositories::RoleRepo;
-use std::collections::HashSet;
 
 pub struct UserService<UR, RR>
 where
