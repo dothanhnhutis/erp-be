@@ -1,0 +1,10 @@
+[package]
+name = "infrastructure"
+version.workspace = true
+publish.workspace = true
+edition.workspace = true
+
+
+[dependencies]
+tracing.workspace = true
+sqlx.workspace = true

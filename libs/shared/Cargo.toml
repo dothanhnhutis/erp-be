@@ -1,0 +1,12 @@
+[package]
+name = "shared"
+version.workspace = true
+publish.workspace = true
+edition.workspace = true
+
+
+
+
+[dependencies]
+dotenvy.workspace = true
+thiserror.workspace = true
