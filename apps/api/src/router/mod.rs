@@ -1,17 +1,25 @@
 pub mod v1;
 
-use crate::router::v1::auth::router_v1;
-use axum::{Router, routing::get};
+use crate::{router::v1::auth::router_v1, state::AppState};
+use axum::{Router, extract::FromRef, routing::get};
 
 async fn health_route() -> &'static str {
     "Ok"
 }
 
-fn router_version() -> Router {
+fn router_version<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+    AppState: FromRef<S>,
+{
     Router::new().nest("/v1", router_v1())
 }
 
-pub fn create_routes() -> Router {
+pub fn create_routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+    AppState: FromRef<S>,
+{
     Router::new()
         .route("/health", get(health_route))
         .nest("/api", router_version())

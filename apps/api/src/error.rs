@@ -5,6 +5,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use domain::errors::DomainError;
 use serde_json::json;
 use thiserror::Error;
 use validator::ValidationErrors;
@@ -19,6 +20,12 @@ pub enum ApiError {
 
     #[error(transparent)]
     Domain(#[from] AppError), // nghiệp vụ bubble từ use case lên // input: fail rule validator (email, length...)
+}
+
+impl From<DomainError> for ApiError {
+    fn from(e: DomainError) -> Self {
+        ApiError::Domain(AppError::from(e))
+    }
 }
 
 impl IntoResponse for ApiError {

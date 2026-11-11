@@ -1,7 +1,7 @@
 use std::{env, num::ParseIntError};
 use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AppConfig {
     pub host: String,
     pub port: u16,
@@ -61,7 +61,7 @@ impl AppConfig {
         let cookie_secure = cookie_secure_raw == "1" || cookie_secure_raw == "true";
 
         Ok(Self {
-            host: optional("SERVER_HOST", "4000")?,
+            host: optional("SERVER_HOST", "0.0.0.0")?,
             port,
             log_filter: optional(
                 "LOG_FILTER",
