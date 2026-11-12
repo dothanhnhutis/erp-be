@@ -1,4 +1,5 @@
 use chrono::{DateTime, SubsecRound, Utc};
+use domain::{entities::session::DeviceType, errors::DomainError};
 use serde::{Deserialize, Serialize, Serializer};
 use validator::{Validate, ValidationError};
 
@@ -20,6 +21,12 @@ pub struct LoginRequest {
     pub device_type: String,
     pub device_name: Option<String>,
     pub app_version: String,
+}
+
+impl LoginRequest {
+    pub fn device_type(&self) -> Result<DeviceType, DomainError> {
+        self.device_type.parse()
+    }
 }
 
 fn validate_device_type(device_type: &str) -> Result<(), ValidationError> {

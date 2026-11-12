@@ -11,7 +11,6 @@ use axum::{
     response::IntoResponse,
 };
 use axum_extra::extract::CookieJar;
-use chrono::Utc;
 use domain::entities::session::DeviceType;
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -30,18 +29,17 @@ pub async fn login_handler(
 
     let device_type = DeviceType::from_str(&payload.device_type)?;
 
-    println!("payload {:#?}", payload);
+    let response = state
+        .auth_service
+        .login(
+            payload,
+            ctx,
+            state.config.access_token_ttl_secs,
+            state.config.refresh_token_ttl_secs,
+            state.config.max_refresh_token_ttl_secs,
+            state.config.jwt_enc.clone(),
+        )
+        .await?;
 
-    println!("ctx {:#?}", ctx);
-    Ok(auth_response(
-        jar,
-        &state,
-        device_type,
-        application::dto::auth::LoginResponse {
-            access_token: String::from("value"),
-            refresh_token: String::from("value"),
-            access_token_expires_at: Utc::now(),
-            refresh_token_expires_at: Utc::now(),
-        },
-    ))
+    Ok(auth_response(jar, &state, device_type, response))
 }

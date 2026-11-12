@@ -10,3 +10,4 @@ edition.workspace = true
 [dependencies]
 dotenvy.workspace = true
 thiserror.workspace = true
+jsonwebtoken.workspace = true

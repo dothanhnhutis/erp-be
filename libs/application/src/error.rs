@@ -1,4 +1,4 @@
-use domain::errors::DomainError;
+use domain::{errors::DomainError, repositories::RepoError};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -36,26 +36,26 @@ impl From<DomainError> for AppError {
     }
 }
 
-// impl From<RepositoryError> for AppError {
-//     fn from(e: RepositoryError) -> Self {
-//         match e {
-//             RepositoryError::NotFound => AppError::NotFound("Không tìm thấy".into()),
-//             RepositoryError::UniqueViolation(c) => {
-//                 let msg = match c.as_str() {
-//                     "idx_users_email_unique" => "Email đã được sử dụng",
-//                     _ => "Dữ liệu đã tồn tại",
-//                 };
-//                 AppError::Conflict(msg.into())
-//             }
-//             RepositoryError::ForeignKeyViolation(_) => {
-//                 AppError::Validation("Tham chiếu không hợp lệ".into())
-//             }
-//             // DB chứa dữ liệu domain coi là sai → lỗi hệ thống, KHÔNG phải lỗi client
-//             RepositoryError::Mapping(d) => AppError::Internal(d.to_string()),
-//             RepositoryError::Unexpected(err) => AppError::Internal(err.to_string()),
-//         }
-//     }
-// }
+impl From<RepoError> for AppError {
+    fn from(e: RepoError) -> Self {
+        match e {
+            RepoError::NotFound => AppError::NotFound("Không tìm thấy".into()),
+            RepoError::UniqueViolation(c) => {
+                let msg = match c.as_str() {
+                    "idx_users_email_unique" => "Email đã được sử dụng",
+                    _ => "Dữ liệu đã tồn tại",
+                };
+                AppError::Conflict(msg.into())
+            }
+            RepoError::ForeignKeyViolation(_) => {
+                AppError::Validation("Tham chiếu không hợp lệ".into())
+            }
+            // DB chứa dữ liệu domain coi là sai → lỗi hệ thống, KHÔNG phải lỗi client
+            RepoError::Mapping(d) => AppError::Internal(d.to_string()),
+            RepoError::Unexpected(err) => AppError::Internal(err.to_string()),
+        }
+    }
+}
 
 // impl From<StorageError> for AppError {
 //     fn from(e: StorageError) -> Self {

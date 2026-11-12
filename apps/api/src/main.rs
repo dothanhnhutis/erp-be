@@ -11,7 +11,10 @@ use std::{error::Error, net::SocketAddr};
 use tokio::net::TcpListener;
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::{router::create_routes, state::AppState};
+use crate::{
+    router::create_routes,
+    state::{AppState, StateData},
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -26,7 +29,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let pg_pool = create_db_pool(&config.db_url).await?;
 
-    let shared_state = AppState::new(config.clone());
+    let shared_state = AppState::new(StateData {
+        config: config.clone(),
+        pool: pg_pool,
+    });
 
     let app = create_routes().with_state(shared_state);
 
