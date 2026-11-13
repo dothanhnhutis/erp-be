@@ -1,3 +1,4 @@
+use chrono::Duration;
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use std::{env, fmt, num::ParseIntError, str::FromStr};
 use thiserror::Error;
@@ -48,11 +49,16 @@ impl fmt::Display for AppEnv {
 
 #[derive(Debug, Clone)]
 pub struct AppConfig {
+    // server
     pub app_env: AppEnv,
     pub host: String,
     pub port: u16,
+    // log
     pub log_filter: String,
+    // databse
     pub db_url: String,
+    // cache
+    pub redis_url: String,
     // session
     pub access_token_name: String,
     pub access_token_ttl_secs: i64,
@@ -61,6 +67,10 @@ pub struct AppConfig {
     pub max_refresh_token_ttl_secs: i64,
     pub jwt_enc: EncodingKey,
     pub jwt_dec: DecodingKey,
+    /// TTL của bản cache phiên trong Redis (giây). Ngắn hơn session TTL để giới hạn staleness.
+    pub session_cache_ttl_secs: i64,
+    /// Khoảng tối thiểu giữa 2 lần ghi `expires_at` xuống DB (giây) — throttle.
+    pub session_db_sync_secs: i64,
     // cookie
     pub cookie_secure: bool,
     pub cookie_domain: Option<String>,
@@ -152,6 +162,24 @@ impl AppConfig {
                     source,
                 })?;
 
+        let session_cache_ttl_secs_raw = required("SESSION_CACHE_TTL_SECS")?;
+        let session_cache_ttl_secs =
+            session_cache_ttl_secs_raw
+                .parse::<i64>()
+                .map_err(|source| ConfigError::InvalidNumber {
+                    key: "SESSION_CACHE_TTL_SECS",
+                    value: session_cache_ttl_secs_raw.clone(),
+                    source,
+                })?;
+        let session_db_sync_secs_raw = required("SESSION_DB_SYNC_SECS")?;
+        let session_db_sync_secs = session_db_sync_secs_raw.parse::<i64>().map_err(|source| {
+            ConfigError::InvalidNumber {
+                key: "SESSION_DB_SYNC_SECS",
+                value: session_db_sync_secs_raw.clone(),
+                source,
+            }
+        })?;
+
         let jwt_secret: String = required("JWT_SECRET")?;
 
         Ok(Self {
@@ -162,16 +190,57 @@ impl AppConfig {
                 "LOG_FILTER",
                 "info,erp_api=debug,tower_http=debug,sqlx=warn",
             )?,
+            // token
             access_token_name: required("ACCESS_TOKEN_NAME")?,
             access_token_ttl_secs,
             refresh_token_name: required("REFRESH_TOKEN_NAME")?,
             refresh_token_ttl_secs,
             max_refresh_token_ttl_secs,
+            //jwt
             jwt_enc: EncodingKey::from_secret(jwt_secret.as_bytes()),
             jwt_dec: DecodingKey::from_secret(jwt_secret.as_bytes()),
+            // session
+            session_cache_ttl_secs,
+            session_db_sync_secs,
+            // cookie
             cookie_domain: optional("COOKIE_DOMAIN", "").ok(),
             cookie_secure,
             db_url: database_url()?,
+            redis_url: required("REDIS_URL")?,
         })
+    }
+}
+
+pub struct TokenConfig {
+    pub jwt_enc: EncodingKey,
+    pub jwt_dec: DecodingKey,
+    pub access_ttl: Duration,
+    pub refresh_ttl: Duration,
+    pub max_refresh_ttl: Duration,
+}
+
+impl From<&AppConfig> for TokenConfig {
+    fn from(value: &AppConfig) -> Self {
+        Self {
+            jwt_enc: value.jwt_enc.clone(),
+            jwt_dec: value.jwt_dec.clone(),
+            access_ttl: Duration::seconds(value.access_token_ttl_secs),
+            refresh_ttl: Duration::seconds(value.refresh_token_ttl_secs),
+            max_refresh_ttl: Duration::seconds(value.max_refresh_token_ttl_secs),
+        }
+    }
+}
+
+pub struct SessionConfig {
+    pub cache_ttl: Duration,
+    pub db_sync: Duration,
+}
+
+impl From<&AppConfig> for SessionConfig {
+    fn from(value: &AppConfig) -> Self {
+        Self {
+            cache_ttl: Duration::seconds(value.session_cache_ttl_secs),
+            db_sync: Duration::seconds(value.session_db_sync_secs),
+        }
     }
 }

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::error::AppError;
+use crate::errors::AppError;
 
 /// Số byte ngẫu nhiên trước khi base64url-encode. 32 byte = 256-bit entropy.
 const TOKEN_BYTES: usize = 32;

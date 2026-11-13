@@ -83,6 +83,48 @@ const INSERT_SESSION: &str = r#"
         revoked_at, revoke_reason, last_seen_at, expires_at, absolute_expires_at, created_at, updated_at
 "#;
 
+const SELECT_SESSION_BY_ID: &str = r#"
+    SELECT
+        id, user_id, refresh_token_hash, previous_token_hash, rotated_at,
+        device_name, device_type, app_version, user_agent,
+        host(ip_address) AS ip_address,
+        revoked_at, revoke_reason, last_seen_at, expires_at, absolute_expires_at,
+        created_at, updated_at
+    FROM user_sessions
+    WHERE id = $1
+"#;
+
+const TOUCH_LAST_SEEN: &str = r#"
+    UPDATE user_sessions
+    SET last_seen_at = $2
+    WHERE id = $1 AND revoked_at IS NULL
+"#;
+
+const REVOKE_SESSION: &str = r#"
+    UPDATE user_sessions
+    SET revoked_at = NOW(), revoke_reason = $2
+    WHERE id = $1 AND revoked_at IS NULL
+"#;
+
+const ROTATE_SESSION: &str = r#"
+    UPDATE user_sessions
+    SET previous_token_hash = refresh_token_hash,
+        refresh_token_hash  = $3,
+        rotated_at          = NOW(),
+        last_seen_at        = NOW(),
+        expires_at          = $4
+    WHERE id = $1
+      AND refresh_token_hash = $2
+      AND revoked_at IS NULL
+      AND absolute_expires_at > NOW()
+    RETURNING
+        id, user_id, refresh_token_hash, previous_token_hash, rotated_at,
+        device_name, device_type, app_version, user_agent,
+        host(ip_address) AS ip_address,
+        revoked_at, revoke_reason, last_seen_at, expires_at, absolute_expires_at,
+        created_at, updated_at
+"#;
+
 impl SessionRepo for PgSessionRepo {
     async fn create(
         &self,
@@ -104,5 +146,47 @@ impl SessionRepo for PgSessionRepo {
 
         // Ok(row.try_into())
         Ok(Session::try_from(row)?)
+    }
+
+    async fn find_by_id(
+        &self,
+        id: uuid::Uuid,
+    ) -> Result<Option<Session>, domain::repositories::RepoError> {
+        let row: Option<SessionRow> = sqlx::query_as(SELECT_SESSION_BY_ID)
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_error)?;
+
+        Ok(row.map(Session::try_from).transpose()?)
+    }
+
+    async fn revoke(
+        &self,
+        id: uuid::Uuid,
+        reason: &str,
+    ) -> Result<(), domain::repositories::RepoError> {
+        sqlx::query(REVOKE_SESSION)
+            .bind(id)
+            .bind(reason)
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_error)?;
+        Ok(())
+    }
+
+    async fn touch_last_seen(
+        &self,
+        id: uuid::Uuid,
+        last_seen_at: DateTime<Utc>,
+    ) -> Result<bool, domain::repositories::RepoError> {
+        let res = sqlx::query(TOUCH_LAST_SEEN)
+            .bind(id)
+            .bind(last_seen_at)
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_error)?;
+
+        Ok(res.rows_affected() == 1)
     }
 }

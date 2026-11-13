@@ -4,7 +4,7 @@ use axum::{
 };
 use serde::de::DeserializeOwned;
 
-use crate::error::ApiError;
+use crate::errors::ApiError;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ValidatedBodyJson<T>(pub T);

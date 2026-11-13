@@ -1,4 +1,4 @@
 pub mod dto;
-pub mod error;
+pub mod errors;
 pub mod security;
 pub mod services;

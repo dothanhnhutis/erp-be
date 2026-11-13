@@ -1,3 +1,5 @@
+use chrono::{DateTime, Utc};
+
 use crate::{
     entities::{
         session::{NewSession, Session},
@@ -29,6 +31,11 @@ pub trait UserRepo {
         &self,
         email: &str,
     ) -> impl Future<Output = Result<Option<User>, RepoError>> + Send;
+
+    fn find_by_id(
+        &self,
+        id: uuid::Uuid,
+    ) -> impl Future<Output = Result<Option<User>, RepoError>> + Send;
 }
 
 pub trait SessionRepo {
@@ -36,4 +43,30 @@ pub trait SessionRepo {
         &self,
         payload: NewSession,
     ) -> impl Future<Output = Result<Session, RepoError>> + Send;
+
+    fn find_by_id(
+        &self,
+        id: uuid::Uuid,
+    ) -> impl Future<Output = Result<Option<Session>, RepoError>> + Send;
+
+    fn touch_last_seen(
+        &self,
+        id: uuid::Uuid,
+        last_seen_at: DateTime<Utc>,
+    ) -> impl Future<Output = Result<bool, RepoError>> + Send;
+
+    fn revoke(
+        &self,
+        id: uuid::Uuid,
+        reason: &str,
+    ) -> impl Future<Output = Result<(), RepoError>> + Send;
+}
+
+pub trait RoleRepo: Send + Sync {
+    /// Mã permission của một user (JOIN user_roles→role_permissions→permissions),
+    /// chỉ tính role đang ACTIVE và chưa xoá mềm.
+    fn find_permission_codes_for_user(
+        &self,
+        user_id: uuid::Uuid,
+    ) -> impl Future<Output = Result<Vec<String>, RepoError>> + Send;
 }

@@ -3,7 +3,7 @@ use argon2::{
     password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash},
 };
 
-use crate::error::AppError;
+use crate::errors::AppError;
 
 /// Hash mật khẩu mới (argon2id, salt ngẫu nhiên) → chuỗi PHC để lưu DB.
 pub fn hash_password(plain: &str) -> Result<String, AppError> {

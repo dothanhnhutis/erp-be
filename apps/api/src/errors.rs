@@ -1,4 +1,4 @@
-use application::error::AppError;
+use application::errors::AppError;
 use axum::{
     Json,
     extract::rejection::JsonRejection,

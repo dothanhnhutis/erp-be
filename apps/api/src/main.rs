@@ -1,20 +1,17 @@
-mod error;
-mod extractor;
+mod errors;
+mod extractors;
 mod handler;
-mod helper;
+mod helpers;
+mod middlewares;
 mod router;
 mod state;
 
-use infrastructure::postgres::pool::create_db_pool;
 use shared::config::AppConfig;
 use std::{error::Error, net::SocketAddr};
 use tokio::net::TcpListener;
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::{
-    router::create_routes,
-    state::{AppState, StateData},
-};
+use crate::{router::create_routes, state::AppState};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -27,14 +24,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with(fmt::layer().json().flatten_event(true)) // flatten giúp đẩy các field tùy biến ra ngoài layer gốc của JSON
         .init();
 
-    let pg_pool = create_db_pool(&config.db_url).await?;
+    let shared_state = AppState::new(&config).await;
 
-    let shared_state = AppState::new(StateData {
-        config: config.clone(),
-        pool: pg_pool,
-    });
-
-    let app = create_routes().with_state(shared_state);
+    let app = create_routes(shared_state.clone()).with_state(shared_state);
 
     let addr = format!("{}:{}", config.host, config.port);
     let listener = TcpListener::bind(&addr).await?;
