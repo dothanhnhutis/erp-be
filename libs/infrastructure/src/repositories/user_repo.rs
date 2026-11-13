@@ -64,7 +64,7 @@ impl UserRepo for PgUserRepo {
         email: &str,
     ) -> Result<Option<domain::entities::user::User>, domain::repositories::RepoError> {
         let sql = format!(
-            "{} WHERE email = lower($1) AND deleted_at IS NULL",
+            "{} WHERE lower(email) = lower($1) AND deleted_at IS NULL",
             SELECT_USER
         );
 

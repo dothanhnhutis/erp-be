@@ -12,13 +12,16 @@ users,
 roles,
 permissions;
 
--- 5. Hàm cập nhật updated_at
+-- 5. Hàm trigger (trigger đã bị xoá cùng bảng)
+DROP FUNCTION IF EXISTS sync_updated_at_triggers ();
+
 DROP FUNCTION IF EXISTS set_updated_at ();
+
+DROP FUNCTION IF EXISTS protect_system_roles ();
 
 -- 6. Extension và schema.
 -- Bỏ các dòng này nếu migration khác (hoặc database có sẵn từ trước) cũng dùng chúng.
-DROP EXTENSION IF EXISTS pgcrypto;
-
+-- DROP EXTENSION IF EXISTS pgcrypto;
 -- 7. Trả cấu hình database về mặc định
 DO $$
     BEGIN

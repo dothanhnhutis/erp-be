@@ -1,9 +1,54 @@
 use jsonwebtoken::{DecodingKey, EncodingKey};
-use std::{env, num::ParseIntError};
+use std::{env, fmt, num::ParseIntError, str::FromStr};
 use thiserror::Error;
+
+/// Môi trường chạy, đọc từ `APP_ENV` (`dev` | `test` | `production`, mặc định `dev`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppEnv {
+    Dev,
+    Test,
+    Production,
+}
+
+impl AppEnv {
+    pub fn from_env() -> Result<Self, ConfigError> {
+        let raw = optional("APP_ENV", "dev")?;
+        raw.parse().map_err(|_| ConfigError::InvalidValue {
+            key: "APP_ENV",
+            value: raw,
+        })
+    }
+
+    pub fn is_production(self) -> bool {
+        self == AppEnv::Production
+    }
+}
+
+impl FromStr for AppEnv {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "dev" | "development" | "local" => Ok(AppEnv::Dev),
+            "test" => Ok(AppEnv::Test),
+            "prod" | "production" => Ok(AppEnv::Production),
+            _ => Err(()),
+        }
+    }
+}
+
+impl fmt::Display for AppEnv {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            AppEnv::Dev => "dev",
+            AppEnv::Test => "test",
+            AppEnv::Production => "production",
+        })
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct AppConfig {
+    pub app_env: AppEnv,
     pub host: String,
     pub port: u16,
     pub log_filter: String,
@@ -30,6 +75,9 @@ pub enum ConfigError {
     NotUnicode(&'static str),
 
     #[error("invalid value for `{key}`: {value:?}")]
+    InvalidValue { key: &'static str, value: String },
+
+    #[error("invalid value for `{key}`: {value:?}")]
     InvalidNumber {
         key: &'static str,
         value: String,
@@ -38,14 +86,22 @@ pub enum ConfigError {
     },
 }
 
-fn required(key: &'static str) -> Result<String, ConfigError> {
+pub fn required(key: &'static str) -> Result<String, ConfigError> {
     env::var(key).map_err(|e| match e {
         env::VarError::NotPresent => ConfigError::Missing(key),
         env::VarError::NotUnicode(_) => ConfigError::NotUnicode(key),
     })
 }
 
-fn optional(key: &'static str, default: &str) -> Result<String, ConfigError> {
+/// Tên biến môi trường chứa chuỗi kết nối Postgres (trùng với tên `sqlx-cli` đọc).
+pub const DATABASE_URL: &str = "DATABASE_URL";
+
+/// Đọc chuỗi kết nối database. Dùng chung cho api và erp-seeder.
+pub fn database_url() -> Result<String, ConfigError> {
+    required(DATABASE_URL)
+}
+
+pub fn optional(key: &'static str, default: &str) -> Result<String, ConfigError> {
     match env::var(key) {
         Ok(v) => Ok(v),
         Err(env::VarError::NotPresent) => Ok(default.to_owned()),
@@ -99,6 +155,7 @@ impl AppConfig {
         let jwt_secret: String = required("JWT_SECRET")?;
 
         Ok(Self {
+            app_env: AppEnv::from_env()?,
             host: optional("SERVER_HOST", "0.0.0.0")?,
             port,
             log_filter: optional(
@@ -114,7 +171,7 @@ impl AppConfig {
             jwt_dec: DecodingKey::from_secret(jwt_secret.as_bytes()),
             cookie_domain: optional("COOKIE_DOMAIN", "").ok(),
             cookie_secure,
-            db_url: required("DB_URL")?,
+            db_url: database_url()?,
         })
     }
 }

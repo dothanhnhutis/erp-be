@@ -1,8 +1,7 @@
 -- ==========================================================
 -- Extension
 -- ==========================================================
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
+-- CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- ==========================================================
 -- Config
 -- ==========================================================
@@ -90,16 +89,18 @@ CREATE TABLE IF NOT EXISTS
 CREATE TABLE IF NOT EXISTS
     roles (
         id UUID NOT NULL DEFAULT uuidv7 (),
+        -- Mã role hệ thống (vd SUPER_ADMIN), do seeder quản lý.
+        -- NULL = role người dùng tạo; NOT NULL = role hệ thống (không xoá / vô hiệu hoá / đổi code được).
+        code VARCHAR(50),
         name VARCHAR(255) NOT NULL,
         description TEXT NOT NULL DEFAULT '',
         status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE', -- ACTIVE | DEACTIVATED
         deactivated_at TIMESTAMPTZ (3), -- vô hiệu hoá lúc nào
         deleted_at TIMESTAMPTZ (3), -- xoá mềm
-        can_delete BOOLEAN NOT NULL DEFAULT TRUE,
-        can_update BOOLEAN NOT NULL DEFAULT TRUE,
         created_at TIMESTAMPTZ (3) NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ (3) NOT NULL DEFAULT NOW(),
         CONSTRAINT pk_roles PRIMARY KEY (id),
+        CONSTRAINT uq_roles_code UNIQUE (code),
         CONSTRAINT chk_roles_status CHECK (status IN ('ACTIVE', 'DEACTIVATED'))
     );
 
@@ -293,40 +294,90 @@ BEGIN
 END;
 $$;
 
---- tạo trigger tự động cập nhật updated_at cho tất cả table nào có field updated_at
-DO $$
-    DECLARE
-        r        RECORD;
-        trg_name TEXT;
-    BEGIN
-        FOR r IN
-            SELECT c.table_schema, c.table_name
-            FROM information_schema.columns c
-                     JOIN information_schema.tables t
-                          ON c.table_schema = t.table_schema
-                              AND c.table_name = t.table_name
-                              AND t.table_type = 'BASE TABLE'
-            WHERE c.column_name = 'updated_at'
-              AND c.table_schema = 'public'
-            LOOP
-                trg_name := format('trg_updated_at_%s', r.table_name);
+--- sync_updated_at_triggers: gắn trigger set_updated_at cho mọi bảng public có cột updated_at
+--- mà CHƯA có trigger. Gọi lại được: đặt `SELECT sync_updated_at_triggers();` ở CUỐI mọi
+--- migration có tạo bảng để bảng mới cũng được gắn (khối DO chỉ chạy 1 lần thì không làm được).
+--- Bảng đã có trigger được bỏ qua → không khoá lại các bảng lớn mỗi lần gọi.
+CREATE
+OR REPLACE FUNCTION sync_updated_at_triggers () RETURNS INTEGER LANGUAGE plpgsql AS $$
+DECLARE
+    r          RECORD;
+    v_trg_name TEXT;
+    v_created  INTEGER := 0;
+BEGIN
+    FOR r IN
+        SELECT c.oid, c.relname
+        FROM pg_class c
+                 JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND c.relkind IN ('r', 'p')   -- bảng thường + bảng cha phân vùng
+          AND NOT c.relispartition       -- partition tự thừa hưởng trigger của bảng cha
+          AND EXISTS (SELECT 1
+                      FROM pg_attribute a
+                      WHERE a.attrelid = c.oid
+                        AND a.attname = 'updated_at'
+                        AND NOT a.attisdropped)
+        ORDER BY c.relname
+        LOOP
+            -- Postgres cắt tên định danh ở 63 byte → tính đúng tên thật để kiểm tra tồn tại
+            v_trg_name := left('trg_updated_at_' || r.relname, 63);
 
-                EXECUTE format(
-                        'DROP TRIGGER IF EXISTS %I ON %I.%I;',
-                        trg_name,
-                        r.table_schema,
-                        r.table_name
-                        );
+            CONTINUE WHEN EXISTS (SELECT 1
+                                  FROM pg_trigger t
+                                  WHERE t.tgrelid = r.oid
+                                    AND t.tgname = v_trg_name);
 
-                EXECUTE format(
-                        'CREATE TRIGGER %I
-                         BEFORE UPDATE ON %I.%I
-                         FOR EACH ROW
-                         EXECUTE FUNCTION set_updated_at();',
-                        trg_name,
-                        r.table_schema,
-                        r.table_name
-                        );
-            END LOOP;
-    END;
+            EXECUTE format(
+                    'CREATE TRIGGER %I BEFORE UPDATE ON public.%I FOR EACH ROW EXECUTE FUNCTION set_updated_at()',
+                    v_trg_name, r.relname);
+            v_created := v_created + 1;
+        END LOOP;
+
+    RETURN v_created;
+END;
 $$;
+
+SELECT sync_updated_at_triggers ();
+
+-- ==========================================================
+-- Bảo vệ role hệ thống (code IS NOT NULL)
+-- Chặn ở tầng DB vì app không phải đường duy nhất ghi vào DB.
+-- TRUNCATE không kích hoạt trigger row-level nên `erp-seeder dev --reset` vẫn chạy được.
+-- ==========================================================
+CREATE
+OR REPLACE FUNCTION protect_system_roles () RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    IF OLD.code IS NULL THEN
+        IF TG_OP = 'UPDATE' AND NEW.code IS NOT NULL THEN
+            RAISE EXCEPTION 'không thể gán code cho role do người dùng tạo (role %)', OLD.id
+                USING ERRCODE = 'check_violation', CONSTRAINT = 'chk_roles_system_protected';
+        END IF;
+        IF TG_OP = 'DELETE' THEN
+            RETURN OLD;
+        END IF;
+        RETURN NEW;
+    END IF;
+
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'không thể xoá role hệ thống %', OLD.code
+            USING ERRCODE = 'check_violation', CONSTRAINT = 'chk_roles_system_protected';
+    END IF;
+
+    IF NEW.code IS DISTINCT FROM OLD.code THEN
+        RAISE EXCEPTION 'không thể đổi code của role hệ thống %', OLD.code
+            USING ERRCODE = 'check_violation', CONSTRAINT = 'chk_roles_system_protected';
+    END IF;
+
+    IF NEW.deleted_at IS NOT NULL OR NEW.status <> 'ACTIVE' THEN
+        RAISE EXCEPTION 'không thể xoá hoặc vô hiệu hoá role hệ thống %', OLD.code
+            USING ERRCODE = 'check_violation', CONSTRAINT = 'chk_roles_system_protected';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_roles_protect_system BEFORE
+UPDATE
+OR DELETE ON roles FOR EACH ROW
+EXECUTE FUNCTION protect_system_roles ();

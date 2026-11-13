@@ -18,7 +18,7 @@ use crate::{
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    dotenvy::dotenv()?;
+    dotenvy::dotenv().ok();
 
     let config = AppConfig::from_env()?;
 

@@ -1,0 +1,26 @@
+[package]
+name = "erp-seeder"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[features]
+# Dữ liệu giả cho dev. KHÔNG bật khi build bản production:
+#   dev : cargo run -p erp-seeder --features dev-fixtures -- all
+#   prod: cargo build -p erp-seeder --release
+dev-fixtures = []
+
+[dependencies]
+shared.workspace = true
+infrastructure.workspace = true
+application.workspace = true
+domain.workspace = true
+
+sqlx.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+dotenvy.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
